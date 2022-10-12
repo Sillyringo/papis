@@ -589,7 +589,8 @@ def cli(
                         "Got files %s from importer '%s'",
                         importer.ctx.files, importer.name)
                 for f in importer.ctx.files:
-                    papis.utils.open_file(f)
+                    if papis.tui.utils.confirm(f'Open this file? (from {importer.name})', yes = False):
+                        papis.utils.open_file(f)
                     _msg = "Use this file? (from {0})".format(importer.name)
                     if batch or papis.tui.utils.confirm(_msg):
                         ctx.files.append(f)
