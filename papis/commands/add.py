@@ -474,7 +474,7 @@ def run(paths: List[str],
 @click.option(
     "-b", "--batch",
     help="Batch mode, do not prompt or otherwise",
-    default=False, is_flag=True)
+    default=True, is_flag=True)
 @click.option(
     "--confirm/--no-confirm",
     help="Ask to confirm before adding to the collection",
