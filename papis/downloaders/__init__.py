@@ -10,6 +10,8 @@ import papis.importer
 import papis.plugin
 import papis.utils
 
+import shutil
+
 if TYPE_CHECKING:
     import bs4
 
@@ -128,11 +130,17 @@ class Downloader(papis.importer.Importer):
             doc_rawdata = self.get_document_data()
             if doc_rawdata and self.check_document_format():
                 import tempfile
+                import filetype
                 with tempfile.NamedTemporaryFile(
                         mode="wb+", delete=False) as f:
                     f.write(doc_rawdata)
                     self.logger.info("Saving downloaded file in '%s'", f.name)
-                    self.ctx.files.append(f.name)
+
+                retrieved_kind = filetype.guess(self.get_document_data())
+                f_name_with_extension = f'{f.name}.{retrieved_kind.extension}'
+                if not os.path.exists(f_name_with_extension):
+                    shutil.move(f.name, f_name_with_extension)
+                    self.ctx.files.append(f_name_with_extension)
 
     def fetch(self) -> None:
         self.fetch_data()
