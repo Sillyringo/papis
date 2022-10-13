@@ -130,19 +130,14 @@ class Downloader(papis.importer.Importer):
             doc_rawdata = self.get_document_data()
             if doc_rawdata and self.check_document_format():
                 import tempfile
-                import filetype
-                with tempfile.NamedTemporaryFile(
-                        mode="wb+", delete=False) as f:
-                    f.write(doc_rawdata)
-                    self.logger.info("Saving downloaded file in '%s'", f.name)
+                
+                temp_dir = tempfile.mkdtemp(prefix = 'papis_download_')
+                temp_file_name = os.path.join(temp_dir, self.get_document_url().split('/')[-1])
 
-                retrieved_kind = filetype.guess(self.get_document_data())
-                f_name_with_extension = f'{f.name}.{getattr(retrieved_kind, "extension", "")}'
-                if retrieved_kind != None and (not os.path.exists(f_name_with_extension)):
-                    shutil.move(f.name, f_name_with_extension)
-                    self.ctx.files.append(f_name_with_extension)
-                else:
-                    self.ctx.files.append(f.name)
+                with open(temp_file_name, "wb+") as f:
+                    f.write(doc_rawdata)
+                    self.logger.info("Saving downloaded file in '%s'", temp_file_name)
+                    self.ctx.files.append(temp_file_name)
 
     def fetch(self) -> None:
         self.fetch_data()
