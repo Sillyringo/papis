@@ -137,10 +137,12 @@ class Downloader(papis.importer.Importer):
                     self.logger.info("Saving downloaded file in '%s'", f.name)
 
                 retrieved_kind = filetype.guess(self.get_document_data())
-                f_name_with_extension = f'{f.name}.{retrieved_kind.extension}'
-                if not os.path.exists(f_name_with_extension):
+                f_name_with_extension = f'{f.name}.{getattr(retrieved_kind, "extension", "")}'
+                if retrieved_kind != None and (not os.path.exists(f_name_with_extension)):
                     shutil.move(f.name, f_name_with_extension)
                     self.ctx.files.append(f_name_with_extension)
+                else:
+                    self.ctx.files.append(f.name)
 
     def fetch(self) -> None:
         self.fetch_data()
