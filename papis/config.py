@@ -7,6 +7,7 @@ from typing import Dict, Any, List, Optional, Callable  # noqa: ignore
 import papis.exceptions
 import papis.library
 
+_set = set
 
 PapisConfigType = Dict[str, Dict[str, Any]]
 
@@ -459,7 +460,7 @@ def getlist(key: str, section: Optional[str] = None) -> List[str]:
     if isinstance(rawvalue, list):
         return list(map(str, rawvalue))
     try:
-        rawvalue = eval(rawvalue)
+        rawvalue = eval(rawvalue.replace('set(', '_set('))
     except Exception as e:
         raise SyntaxError(
             "The key '{0}' must be a valid python object\n\t{1}"
