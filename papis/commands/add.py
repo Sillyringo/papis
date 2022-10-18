@@ -273,8 +273,7 @@ def run(paths: List[str],
     :type  subfolder: str
     :param confirm: Whether or not to ask user for confirmation before adding.
     :type  confirm: bool
-    :param open_file: Whether or not to ask the user for opening the file
-        before adding.
+    :param open_file: Whether or not to open the downloaded file.
     :type  open_file: bool
     :param edit: Whether or not to ask user for editing the info file
         before adding.
@@ -415,9 +414,6 @@ def run(paths: List[str],
             height=20)
         confirm = True
 
-    if open_file:
-        for d_path in tmp_document.get_files():
-            papis.utils.open_file(d_path)
     if confirm:
         if not papis.tui.utils.confirm('Really add?'):
             return
@@ -481,7 +477,7 @@ def run(paths: List[str],
     default=lambda: True if papis.config.get('add-confirm') else False)
 @click.option(
     "--open/--no-open", "open_file",
-    help="Open file before adding document",
+    help="Open downloaded file",
     default=lambda: True if papis.config.get('add-open') else False)
 @click.option(
     "--edit/--no-edit",
@@ -543,7 +539,6 @@ def cli(
     if batch:
         edit = False
         confirm = False
-        open_file = False
 
     import_mgr = papis.importer.get_import_mgr()
     matching_importers = []  # type: List[papis.importer.Importer]
@@ -589,7 +584,7 @@ def cli(
                         "Got files %s from importer '%s'",
                         importer.ctx.files, importer.name)
                 for f in importer.ctx.files:
-                    if papis.tui.utils.confirm(f'Open this file? (from {importer.name})', yes = False):
+                    if open_file:
                         papis.utils.open_file(f)
                     _msg = "Use this file? (from {0})".format(importer.name)
                     if batch or papis.tui.utils.confirm(_msg):
