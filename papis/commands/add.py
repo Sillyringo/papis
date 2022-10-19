@@ -252,10 +252,11 @@ def run(paths: List[str],
         subfolder: Optional[str] = None,
         base_path: Optional[pathlib.Path] = None,
         confirm: bool = False,
-        open_file: bool = False,
+        overwrite: bool = False,
         edit: bool = False,
         git: bool = False,
-        link: bool = False
+        link: bool = False,
+        skip: bool = False
         ) -> None:
     """
     :param paths: Paths to the documents to be added
@@ -407,12 +408,17 @@ def run(paths: List[str],
         logger.warning(
             "(Hint) Use the 'papis update' command to just update the info.")
 
-        papis.tui.utils.text_area(
-            'The following document is already in your library',
-            papis.document.dump(found_document),
-            lexer_name='yaml',
-            height=20)
-        confirm = True
+        if skip:
+            logger.info("Abort")
+            return
+
+        if not overwrite:
+            papis.tui.utils.text_area(
+                'The following document is already in your library',
+                papis.document.dump(found_document),
+                lexer_name='yaml',
+                height=20)
+            confirm = True
 
     if confirm:
         if not papis.tui.utils.confirm('Really add?'):
@@ -499,6 +505,16 @@ def run(paths: List[str],
     help="Download file with importer even if local file is passed",
     default=False,
     is_flag=True)
+@click.option(
+    "--overwrite", "--ow", "overwrite",
+    help="Replace local file with the download one",
+    default=False,
+    is_flag=True)
+@click.option(
+    "--skip", "--sk", "skip",
+    help="Abort if local document exists",
+    default=False,
+    is_flag=True)
 def cli(
         files: List[str],
         set_list: List[Tuple[str, str]],
@@ -514,7 +530,9 @@ def cli(
         git: bool,
         link: bool,
         list_importers: bool,
-        force_download: bool) -> None:
+        force_download: bool,
+        overwrite: bool,
+        skip: bool) -> None:
 
     if list_importers:
         import_mgr = papis.importer.get_import_mgr()
@@ -610,7 +628,8 @@ def cli(
         subfolder=subfolder,
         base_path=base_path,
         confirm=confirm,
-        open_file=open_file,
+        overwrite=overwrite,
         edit=edit,
         git=git,
-        link=link)
+        link=link,
+        skip=skip)
