@@ -195,7 +195,6 @@ def cli(query: str,
                         "Got files %s from importer '%s'",
                         importer.ctx.files, importer.name)
                     for f in importer.ctx.files:
-                        papis.utils.open_file(f)
                         if papis.tui.utils.confirm("Use this file?"):
                             ctx.files.append(f)
 
