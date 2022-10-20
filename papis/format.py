@@ -49,6 +49,7 @@ class PythonFormater(Formater):
         fdoc = Document()
         fdoc.update(doc)
         try:
+            fdoc['year'] = str(fdoc['year'])
             return fmt.format(**{doc_name: fdoc}, **additional)
         except Exception as exception:
             return str(exception)
