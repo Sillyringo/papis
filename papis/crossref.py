@@ -320,7 +320,7 @@ class DoiFromPdfImporter(papis.importer.Importer):
             importer = Importer(uri=self.doi)
             importer.fetch()
             self.ctx = importer.ctx
-
+            self.ctx.files.append(self.uri)
 
 class Importer(papis.importer.Importer):
 
