@@ -1,5 +1,6 @@
 """Module defining the main document type.
 """
+from curses import nonl
 import os
 import re
 import logging
@@ -396,7 +397,7 @@ def sort(docs: List[Document], key: str, reverse: bool) -> List[Document]:
                         datetime.datetime.strptime(str(doc[key]),
                                                    papis.strings.time_format)
                     return (sort_rankings["date"],
-                            date_value, 0, str(doc[key]))
+                            zero_date - date_value, 0, str(doc[key]))
                 except ValueError:
                     pass
 
@@ -415,7 +416,7 @@ def sort(docs: List[Document], key: str, reverse: bool) -> List[Document]:
             # it comes last.
             return (sort_rankings["None"], zero_date, 0, '')
     logger.debug("Sorting %d documents", len(docs))
-    return sorted(docs, key=lambda d: _sort_for_key(key, d), reverse=not reverse)
+    return sorted(docs, key=lambda d: _sort_for_key(key, d), reverse=reverse)
 
 
 def new(folder_path: str, data: Dict[str, Any],
