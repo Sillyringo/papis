@@ -390,7 +390,7 @@ def sort(docs: List[Document], key: str, reverse: bool) -> List[Document]:
     def _sort_for_key(key: str, doc: Document
                       ) -> Tuple[int, datetime.datetime, int, str]:
         if key in doc.keys():
-            if key == 'time-added':
+            if key == 'time_added':
                 try:
                     date_value = \
                         datetime.datetime.strptime(str(doc[key]),

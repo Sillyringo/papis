@@ -614,7 +614,7 @@ def cli(
 
     if papis.config.getboolean("time-stamp"):
         import time
-        ctx.data['time-added'] = time.strftime(papis.strings.time_format)
+        ctx.data['time_added'] = time.strftime(papis.strings.time_format)
 
     base_path = pathlib.Path(
         papis.pick.pick_subfolder_from_lib(papis.config.get_lib_name())[0]
