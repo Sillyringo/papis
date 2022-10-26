@@ -415,7 +415,7 @@ def sort(docs: List[Document], key: str, reverse: bool) -> List[Document]:
             # it comes last.
             return (sort_rankings["None"], zero_date, 0, '')
     logger.debug("Sorting %d documents", len(docs))
-    return sorted(docs, key=lambda d: _sort_for_key(key, d), reverse=reverse)
+    return sorted(docs, key=lambda d: _sort_for_key(key, d), reverse=not reverse)
 
 
 def new(folder_path: str, data: Dict[str, Any],
