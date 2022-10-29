@@ -55,7 +55,8 @@ def run(document: papis.document.Document,
 
 
 def create_notes(document: papis.document.Document,
-                 notes_path: str) -> None:
+                 notes_path: str,
+                 notext: bool) -> None:
 
     templ_path = os.path.expanduser(papis.config.getstring("notes-template"))
     templ_out = ""
@@ -65,12 +66,25 @@ def create_notes(document: papis.document.Document,
             templ_src = f.read()
             templ_out = papis.format.format(templ_src, document)
 
+        if document.has('files'):
+            import re
+            from pdfminer.high_level import extract_text
+                
+            for file in document.get_files():
+                pdf_text = extract_text(file)
+                
+                for mobj in list(reversed(list(re.finditer('[^\s] *\n *[^\s]', pdf_text)))):
+                    pdf_text = pdf_text[:mobj.start() + 1] + ' ' + pdf_text[mobj.end() - 1:]
+
+                templ_out += pdf_text
+
     with open(notes_path, 'w+') as f:
         f.write(templ_out)
 
 
 def edit_notes(document: papis.document.Document,
-               git: bool = False) -> None:
+               git: bool = False,
+               notext: bool = False) -> None:
     logger = logging.getLogger('edit:notes')
     logger.debug("Editing notes")
 
@@ -89,7 +103,7 @@ def edit_notes(document: papis.document.Document,
 
     if not os.path.exists(notes_path):
         logger.debug("Creating '%s'", notes_path)
-        create_notes(document, notes_path)
+        create_notes(document, notes_path, notext = notext)
 
     papis.api.edit_file(notes_path)
     if git:
@@ -112,6 +126,11 @@ def edit_notes(document: papis.document.Document,
     help="Edit notes associated to the document",
     default=False,
     is_flag=True)
+@click.option(
+    "--notext",
+    help="Do not extract text from pdf when create note",
+    default=False,
+    is_flag=True)
 @papis.cli.all_option()
 @click.option(
     "-e",
@@ -122,6 +141,7 @@ def cli(query: str,
         doc_folder: str,
         git: bool,
         notes: bool,
+        notext: bool,
         _all: bool,
         editor: Optional[str],
         sort_field: Optional[str],
@@ -150,7 +170,7 @@ def cli(query: str,
 
     for document in documents:
         if notes:
-            edit_notes(document, git=git)
+            edit_notes(document, git=git, notext = notext)
 
         else:
             run(document, git=git)
