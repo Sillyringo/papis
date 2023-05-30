@@ -66,7 +66,7 @@ def create_notes(document: papis.document.Document,
             templ_src = f.read()
             templ_out = papis.format.format(templ_src, document)
 
-        if document.has('files'):
+        if (not notext) and document.has('files'):
             import re
             from pdfminer.high_level import extract_text
                 
