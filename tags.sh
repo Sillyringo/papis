@@ -1,0 +1,1 @@
+grep -hRIE "^tags: ([^\s])" . | sort -u | sed -E 's/^tags: //g' | sed 's/ /\n/g' | fzf
