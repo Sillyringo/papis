@@ -1,6 +1,5 @@
 """Module defining the main document type.
 """
-from curses import nonl
 import os
 import re
 import logging
