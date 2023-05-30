@@ -156,7 +156,7 @@ def find_arxivid_in_text(text: str) -> Optional[str]:
     forbidden_arxivid_characters = r'"\(\)\s%!$^\'<>@,;:#?&'
     # Sometimes it is in the javascript defined
     regex = re.compile(
-        r'(arxiv(.org|.com)(/abs|/pdf)?/)?(?P<arxivid>\d{4}\.\d{4,5}(v\d{1,})?)', re.I
+        r'(arxiv(.org|.com)(/abs|/pdf)?/)?(?P<arxivid>\d{4}\.\d{4,5}(v\d{1,})?|[a-zA-Z-]+/\d+)', re.I
     )
     miter = regex.finditer(text)
     try:
