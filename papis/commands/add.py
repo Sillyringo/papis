@@ -252,6 +252,7 @@ def run(paths: List[str],
         subfolder: Optional[str] = None,
         base_path: Optional[pathlib.Path] = None,
         confirm: bool = False,
+        open_file: bool = False,
         overwrite: bool = False,
         edit: bool = False,
         git: bool = False,
@@ -274,7 +275,8 @@ def run(paths: List[str],
     :type  subfolder: str
     :param confirm: Whether or not to ask user for confirmation before adding.
     :type  confirm: bool
-    :param open_file: Whether or not to open the downloaded file.
+    :param open_file: Whether or not to ask the user for opening the file
+        before adding.
     :type  open_file: bool
     :param edit: Whether or not to ask user for editing the info file
         before adding.
@@ -420,6 +422,9 @@ def run(paths: List[str],
                 height=20)
             confirm = True
 
+    if open_file:
+        for d_path in tmp_document.get_files():
+            papis.utils.open_file(d_path)
     if confirm:
         if not papis.tui.utils.confirm('Really add?'):
             return
@@ -557,6 +562,7 @@ def cli(
     if batch:
         edit = False
         confirm = False
+        open_file = False
 
     import_mgr = papis.importer.get_import_mgr()
     matching_importers = []  # type: List[papis.importer.Importer]
@@ -628,6 +634,7 @@ def cli(
         subfolder=subfolder,
         base_path=base_path,
         confirm=confirm,
+        open_file=open_file,
         overwrite=overwrite,
         edit=edit,
         git=git,
