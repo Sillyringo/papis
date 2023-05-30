@@ -49,8 +49,19 @@ class PythonFormater(Formater):
         fdoc = Document()
         fdoc.update(doc)
         try:
-            fdoc['year'] = str(fdoc['year'])
-            return fmt.format(**{doc_name: fdoc}, **additional)
+            fdoc_year_not_str = False
+
+            if type(fdoc['year']) != str:
+                fdoc_year_not_str = True
+                fdoc_year_type = type(fdoc['year'])
+                fdoc['year'] = str(fdoc['year'])
+
+            result = fmt.format(**{doc_name: fdoc}, **additional)
+
+            if fdoc_year_not_str:
+                fdoc['year'] = fdoc_year_type(fdoc['year'])
+
+            return result
         except Exception as exception:
             return str(exception)
 
