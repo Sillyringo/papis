@@ -1,82 +1,83 @@
 r"""
 This command is useful to issue commands in the directory of your library.
 
-CLI Examples
-^^^^^^^^^^^^
+Examples
+^^^^^^^^
 
-    - List files in your directory
+- List all files in the library directory
 
-    .. code::
+    .. code:: sh
 
         papis run ls
 
-    - Find a file in your directory using the ``find`` command
+- Find a file the library directory using the ``find`` command
 
-    .. code::
+    .. code:: sh
 
         papis run find -name 'document.pdf'
 
-    - Find all pdfs in the document folders matching einstein
+- Find all PDFs in the document folders matching "einstein"
 
-    .. code::
+    .. code:: sh
 
         papis run -p einstein --all -- find . -name '*.pdf'
 
-      notice that in general, the symbol ``--`` is advisable
-      so that the arguments after it are considered as positional arguments
-      for the shell commands.
+    In general, the symbol ``--`` is advisable so that the arguments after it
+    are considered as positional arguments for the shell commands.
 
-      In this example you could also use pipes, for instance to print the
-      absolute path to the files, in linux you can use the command
-      ``readlink -f`` and a pipe ``|`` to do this, i.e.:
+    In this example you could also use pipes. For instance, to print the
+    absolute path to the files, in Linux you can use the command
+    ``readlink -f`` and a pipe ``|`` to do this, i.e.
 
-    .. code::
+    .. code:: sh
 
         papis run -p einstein \
                 --all -- "find . -name '*.pdf' | xargs readlink -f"
 
-    - Replace some text in all info.yaml files by something.
-      For instance imagine you want to replace all ``note`` field names
-      in the ``info.yaml`` files by ``_note`` so that the ``note`` field
-      does not get exported to bibtex. You can do
+- Replace some text in all ``info.yaml`` files by something.
+  For instance imagine you want to replace all ``note`` field names
+  in the ``info.yaml`` files by ``_note`` so that the ``note`` field
+  does not get exported. You can do
 
-      .. code::
+    .. code:: sh
 
-          papis run -a -- sed -i "s/^note:/_note:/" info.yaml
+        papis run -a -- sed -i 's/^note:/_note:/' info.yaml
 
 
-Cli
-^^^
+Command-line Interface
+^^^^^^^^^^^^^^^^^^^^^^
+
 .. click:: papis.commands.run:cli
     :prog: papis run
 """
-import os
-import logging
+
 from typing import List, Optional
 
 import click
 
 import papis.pick
 import papis.cli
+import papis.utils
 import papis.config
 import papis.document
 import papis.database
+import papis.logging
 
-logger = logging.getLogger('run')
-
-
-def run(folder: str, command: List[str] = []) -> int:
-    logger.debug("Changing directory to '%s'", folder)
-    os.chdir(os.path.expanduser(folder))
-    commandstr = " ".join(command)
-    logger.debug("Command: %s", commandstr)
-    return os.system(commandstr)
+logger = papis.logging.get_logger(__name__)
 
 
-@click.command("run", context_settings=dict(ignore_unknown_options=True))
-@click.help_option('--help', '-h')
+def run(folder: str, command: Optional[List[str]] = None) -> None:
+    if command is None:
+        return
+
+    papis.utils.run(command, cwd=folder, wait=True)
+
+
+@click.command("run",                   # type: ignore[arg-type]
+               context_settings={"ignore_unknown_options": True})
+@click.help_option("--help", "-h")
 @click.option(
-    '--pick', '-p',
+    "--pick", "-p",
     help="Give a query to pick a document to run the command in its folder",
     metavar="<QUERY>",
     type=str,
@@ -85,7 +86,7 @@ def run(folder: str, command: List[str] = []) -> int:
 @papis.cli.doc_folder_option()
 @papis.cli.all_option()
 @click.option(
-    '--prefix',
+    "--prefix",
     default=None,
     type=str,
     metavar="<PREFIX>",
@@ -122,4 +123,5 @@ def cli(run_command: List[str],
         folders = papis.config.get_lib_dirs()
 
     for folder in folders:
-        run(folder, command=([prefix] if prefix else []) + list(run_command))
+        cmd = ([prefix] if prefix else []) + list(run_command)
+        run(folder, cmd)

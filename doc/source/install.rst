@@ -2,9 +2,10 @@ Installation
 ============
 
 .. image:: https://badge.fury.io/py/papis.svg
-   :target: https://badge.fury.io/py/papis
+    :target: https://badge.fury.io/py/papis
+
 .. image:: https://repology.org/badge/vertical-allrepos/papis.svg
-   :target: https://repology.org/metapackage/papis
+    :target: https://repology.org/project/papis/versions
 
 Using pip
 ---------
@@ -39,16 +40,16 @@ Archlinux
 ---------
 
 - The package `papis` is also found in the archlinux repositories
-  `here <https://aur.archlinux.org/packages/papis/>`_.
+  `here <https://aur.archlinux.org/packages/papis/>`__.
 - If you want to use the git version of ``papis`` instead
-  refer to `papis-git <https://aur.archlinux.org/packages/papis-git/>`_ package.
-  Thanks `Julian <https://julianhauser.com/>`_!.
+  refer to `papis-git <https://aur.archlinux.org/packages/papis-git/>`__ package.
+  Thanks `Julian <https://julianhauser.com/>`__!.
 
 NixOS
 -----
 
-If you are running `NixOS <https://nixos.org/>`_ or you have the
-`nix <https://nixos.org/nix/>`_ package manager installed, you can install
+If you are running `NixOS <https://nixos.org/>`__ or you have the
+`nix <https://github.com/NixOS/nix>`__ package manager installed, you can install
 papis by running:
 
 ::
@@ -81,11 +82,10 @@ First of all you have to get the code, open a terminal and hit
   git clone https://github.com/papis/papis.git
 
 or download the
-`zip file <https://github.com/papis/papis/archive/master.zip>`_.
+`zip file <https://github.com/papis/papis/archive/refs/heads/main.zip>`__.
 
 
-Go inside of the ``papis`` source folder and you can either use the ``Makefile``
-or install it with ``python3``.
+Go inside of the ``papis`` source folder and you can install it with ``python3``.
 
 The general command that you have to hit is by using the ``setup.py`` script:
 

@@ -1,13 +1,8 @@
 import re
 from typing import (
-        Any, List, Dict, Iterator, Tuple, Union, Pattern, TYPE_CHECKING)
+    Any, List, Dict, Iterator, Tuple, Union, Pattern,
+    TypedDict, TYPE_CHECKING)
 
-try:
-    from typing import TypedDict  # Python 3.8+
-except ImportError:
-    from typing_extensions import TypedDict
-
-import papis.bibtex
 import papis.config
 import papis.document
 import papis.importer
@@ -16,15 +11,14 @@ import papis.utils
 if TYPE_CHECKING:
     import bs4
 
-MetaEquivalence = TypedDict(
-    "MetaEquivalence", {
-        "tag": str,
-        "key": str,
-        "attrs": Dict[str, Union[str, Pattern[str]]],
-    }
-)
 
-meta_equivalences = [
+class MetaEquivalence(TypedDict):
+    tag: str
+    key: str
+    attrs: Dict[str, Union[str, Pattern[str]]]
+
+
+meta_equivalences: List[MetaEquivalence] = [
     # google
     {"tag": "meta", "key": "abstract", "attrs": {"name": "description"}},
     {"tag": "meta", "key": "doi", "attrs": {"name": "doi"}},
@@ -101,51 +95,55 @@ meta_equivalences = [
             "key": "doi",
             "attrs": {"name": re.compile("dc.identifier", re.I),
                       "scheme": "doi"}},
-]  # type: List[MetaEquivalence]
+]
 
 
 def parse_meta_headers(soup: "bs4.BeautifulSoup") -> Dict[str, Any]:
-    global meta_equivalences
-    # metas = soup.find_all(name="meta")
-    data = dict()  # type: Dict[str, Any]
+    data: Dict[str, Any] = {}
     for equiv in meta_equivalences:
-        elements = soup.find_all(equiv['tag'], attrs=equiv["attrs"])
+        elements = soup.find_all(equiv["tag"], attrs=equiv["attrs"])
         if elements:
             value = elements[0].attrs.get("content")
-            data[equiv["key"]] = str(value).replace('\r', '')
+            data[equiv["key"]] = str(value).replace("\r", "")
 
     author_list = parse_meta_authors(soup)
     if author_list:
-        data['author_list'] = author_list
-        data['author'] = papis.document.author_list_to_author(data)
+        data["author_list"] = author_list
+        data["author"] = papis.document.author_list_to_author(data)
 
     return data
 
 
 def parse_meta_authors(soup: "bs4.BeautifulSoup") -> List[Dict[str, Any]]:
-    author_list = []  # type: List[Dict[str, Any]]
-    authors = soup.find_all(name='meta', attrs={'name': 'citation_author'})
+    # find author tags
+    authors = soup.find_all(name="meta", attrs={"name": "citation_author"})
     if not authors:
         authors = soup.find_all(
-            name='meta', attrs={'name': re.compile('dc.creator', re.I)})
-    affs = soup.find_all(
-        name='meta',
-        attrs={'name': 'citation_author_institution'})
+            name="meta", attrs={"name": re.compile("dc.creator", re.I)})
 
-    if affs and authors:
-        tuples = zip(authors, affs)  # type: Iterator[Tuple[Any, Any]]
-    elif authors:
-        tuples = ((a, None) for a in authors)
-    else:
+    if not authors:
         return []
 
-    for t in tuples:
-        fullname = t[0].get('content')
-        affiliation = [dict(name=t[1].get('content'))] if t[1] else []
-        fullnames = re.split(r'\s+', fullname)
-        author_list.append(dict(
-            given=fullnames[0],
-            family=' '.join(fullnames[1:]),
-            affiliation=affiliation,
-        ))
+    # find affiliation tags
+    affs = soup.find_all(
+        name="meta",
+        attrs={"name": "citation_author_institution"})
+
+    if affs and len(authors) == len(affs):
+        authors_and_affs: Iterator[Tuple[Any, Any]] = zip(authors, affs)
+    else:
+        authors_and_affs = ((a, None) for a in authors)
+
+    # convert to papis author format
+    author_list: List[Dict[str, Any]] = []
+    for author, aff in authors_and_affs:
+        fullname, = papis.document.split_authors_name([author.get("content")])
+        affiliation = [{"name": aff.get("content")}] if aff else []
+
+        author_list.append({
+            "given": fullname["given"],
+            "family": fullname["family"],
+            "affiliation": affiliation,
+            })
+
     return author_list

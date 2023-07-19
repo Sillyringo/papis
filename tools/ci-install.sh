@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
-pip install setuptools
-pip install flake8
-pip install python-coveralls
-pip install types-requests types-PyYAML types-contextvars
-pip install -e .[develop]
-pip install -e .[optional]
+set -ef -o pipefail
+
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e .[develop]
+python -m pip install -e .[optional]

@@ -1,127 +1,199 @@
-import logging
-from typing import Optional, Union, Any, Dict
+from typing import Any, Dict, Optional
 
 import papis.config
 import papis.plugin
 import papis.document
-from papis.document import Document
+import papis.logging
+
+logger = papis.logging.get_logger(__name__)
+
+FORMATER: Optional["Formater"] = None
+
+#: The entry point name for formater plugins.
+FORMATER_EXTENSION_NAME = "papis.format"
 
 
-FormatDocType = Union[Document, Dict[str, Any]]
-logger = logging.getLogger("format")
-_FORMATER = None  # type: Optional[Formater]
+class InvalidFormaterError(ValueError):
+    """An exception that is thrown when an invalid formater is selected."""
 
 
-class InvalidFormatterValue(Exception):
-    pass
+class FormatFailedError(Exception):
+    """An exception that is thrown when a format string fails to be interpolated.
+
+    This can happen due to lack of data (e.g. missing fields in the document)
+    or invalid format strings (e.g. passed to the wrong formatter).
+    """
+
+
+def unescape(fmt: str) -> str:
+    return fmt.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
 
 
 class Formater:
+    """A generic formatter that works on templated strings using a document."""
+
+    def __init__(self) -> None:
+        self.default_doc_name = papis.config.getstring("format-doc-name")
+
     def format(self,
                fmt: str,
-               doc: FormatDocType,
+               doc: papis.document.DocumentLike,
                doc_key: str = "",
-               additional: Dict[str, Any] = {}) -> str:
+               additional: Optional[Dict[str, Any]] = None,
+               default: Optional[str] = None) -> str:
         """
-        :param fmt: Python-like format string.
-        :type  fmt: str
-        :param doc: Papis document
-        :type  doc: FormatDocType
-        :param doc_key: Name of the document in the format string
-        :type  doc: str
-        :param additional: Additional named keys available to the format string
-        :returns: Formated string
-        :rtype: str
+        :param fmt: a format string understood by the formater.
+        :param doc: an object convertible to a document.
+        :param doc_key: the name of the document in the format string. By
+            default, this falls back to :ref:`config-settings-format-doc-name`.
+        :param default: an optional string to use as a default value if the
+            formatting fails. If no default is given, a :exc:`FormatFailedError`
+            will be raised.
+        :param additional: a :class:`dict` of additional entries to pass to the
+            formater.
+
+        :returns: a string with all the replacement fields filled in.
         """
-        ...
+        raise NotImplementedError(type(self).__name__)
 
 
 class PythonFormater(Formater):
-    """Construct a string using a pythonic format string and a document.
-    You can activate this formatter by setting ``formater = python``.
+    """Construct a string using a `PEP 3101 <https://peps.python.org/pep-3101/>`__
+    (*str.format* based) format string.
+
+    This formater is named ``"python"`` and can be set using the
+    :ref:`config-settings-formater` setting in the configuration file.
     """
+
     def format(self,
                fmt: str,
-               doc: FormatDocType,
+               doc: papis.document.DocumentLike,
                doc_key: str = "",
-               additional: Dict[str, Any] = {}) -> str:
-        doc_name = doc_key or papis.config.getstring("format-doc-name")
-        fdoc = Document()
-        fdoc.update(doc)
+               additional: Optional[Dict[str, Any]] = None,
+               default: Optional[str] = None) -> str:
+        if additional is None:
+            additional = {}
+
+        fmt = unescape(fmt)
+        if not isinstance(doc, papis.document.Document):
+            doc = papis.document.from_data(doc)
+
+        doc_name = doc_key or self.default_doc_name
+
         try:
             fdoc_year_not_str = False
 
-            if type(fdoc['year']) != str:
+            if type(doc['year']) != str:
                 fdoc_year_not_str = True
-                fdoc_year_type = type(fdoc['year'])
-                fdoc['year'] = str(fdoc['year'])
+                fdoc_year_type = type(doc['year'])
+                doc['year'] = str(doc['year'])
 
-            result = fmt.format(**{doc_name: fdoc}, **additional)
+            result = fmt.format(**{doc_name: doc}, **additional)
 
             if fdoc_year_not_str:
-                fdoc['year'] = fdoc_year_type(fdoc['year'])
+                doc['year'] = fdoc_year_type(doc['year'])
 
             return result
-        except Exception as exception:
-            return str(exception)
+        except Exception as exc:
+            if default is not None:
+                logger.warning("Could not format string '%s' for document '%s'",
+                               fmt, papis.document.describe(doc), exc_info=exc)
+                return default
+            else:
+                raise FormatFailedError(fmt) from exc
 
 
 class Jinja2Formater(Formater):
-    """Construct a Jinja2 formated string.
-    You can activate this formatter by setting ``formater = jinja2``.
+    """Construct a string using `Jinja2 <https://palletsprojects.com/p/jinja/>`__
+    templates.
+
+    This formater is named ``"jinja2"`` and can be set using the
+    :ref:`config-settings-formater` setting in the configuration file.
     """
 
     def __init__(self) -> None:
+        super().__init__()
+
         try:
-            import jinja2
-        except ImportError:
-            logger.exception("""
-            You're trying to format strings using jinja2
-            Jinja2 is not installed by default, so just install it
-                pip3 install jinja2
-            """)
-        else:
-            self.jinja2 = jinja2
+            import jinja2       # noqa: F401
+        except ImportError as exc:
+            logger.error(
+                "The 'jinja2' formater requires the 'jinja' library. "
+                "To use this functionality install it using e.g. "
+                "'pip install jinja2'.", exc_info=exc)
+            raise exc
 
     def format(self,
                fmt: str,
-               doc: FormatDocType,
+               doc: papis.document.DocumentLike,
                doc_key: str = "",
-               additional: Dict[str, Any] = {}) -> str:
-        doc_name = doc_key or papis.config.getstring("format-doc-name")
+               additional: Optional[Dict[str, Any]] = None,
+               default: Optional[str] = None) -> str:
+        if additional is None:
+            additional = {}
+
+        from jinja2 import Template
+
+        fmt = unescape(fmt)
+        if not isinstance(doc, papis.document.Document):
+            doc = papis.document.from_data(doc)
+
+        doc_name = doc_key or self.default_doc_name
         try:
-            return str(self.jinja2
-                           .Template(fmt)
-                           .render(**{doc_name: doc}, **additional))
-        except Exception as exception:
-            return str(exception)
+            return str(Template(fmt).render(**{doc_name: doc}, **additional))
+        except Exception as exc:
+            if default is not None:
+                logger.warning("Could not format string '%s' for document '%s'",
+                               fmt, papis.document.describe(doc), exc_info=exc)
+                return default
+            else:
+                raise FormatFailedError(fmt) from exc
 
 
-def _extension_name() -> str:
-    return "papis.format"
+def get_formater(name: Optional[str] = None) -> Formater:
+    """Initialize and return a formater plugin.
 
+    Note that the formater is cached and all subsequent calls to this function
+    will return the same formater.
 
-def get_formater() -> Formater:
-    """Get the formatter named 'name' declared as a plugin"""
-    global _FORMATER
-    if _FORMATER is None:
-        name = papis.config.getstring("formater")
+    :param name: the name of the desired formater, by default this uses
+        the value of :ref:`config-settings-formater`.
+    """
+    global FORMATER
+
+    if FORMATER is None:
+        mgr = papis.plugin.get_extension_manager(FORMATER_EXTENSION_NAME)
+
+        if name is None:
+            name = papis.config.getstring("formater")
+
         try:
-            _FORMATER = papis.plugin.get_extension_manager(
-                _extension_name())[name].plugin()
-        except KeyError:
-            logger.error("Invalid formatter: %s", name)
-            raise InvalidFormatterValue(
-                "Registered formatters are: %s",
-                papis.plugin.get_available_entrypoints(_extension_name()))
-        logger.debug("Getting %s", name)
+            FORMATER = mgr[name].plugin()
+        except Exception as exc:
+            entrypoints = (
+                papis.plugin.get_available_entrypoints(FORMATER_EXTENSION_NAME))
+            logger.error("Invalid formater '%s'. Registered formaters are '%s'.",
+                         name, "', '".join(entrypoints), exc_info=exc)
+            raise InvalidFormaterError("Invalid formater: '{}'".format(name))
 
-    return _FORMATER
+        logger.debug("Using '%s' formater.", name)
+
+    return FORMATER
 
 
 def format(fmt: str,
-           doc: FormatDocType,
+           doc: papis.document.DocumentLike,
            doc_key: str = "",
-           additional: Dict[str, Any] = {}) -> str:
+           additional: Optional[Dict[str, Any]] = None,
+           default: Optional[str] = None) -> str:
+    """Format a string using the selected formater.
+
+    This is the user-facing function that should be called when formating a
+    string. The formaters should not be called directly.
+
+    Arguments match those of :meth:`Formater.format`.
+    """
     formater = get_formater()
-    return formater.format(fmt, doc, doc_key=doc_key, additional=additional)
+    return formater.format(fmt, doc, doc_key=doc_key,
+                           additional=additional,
+                           default=default)

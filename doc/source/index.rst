@@ -8,7 +8,7 @@ Welcome to papis' documentation!
 
 Papis is a command-line based document and bibliography manager. Its
 command-line interface (*CLI*) is heavily tailored after
-`Git <http://git-scm.com>`__.
+`Git <https://git-scm.com>`__.
 
 .. toctree::
    :maxdepth: 2
@@ -19,9 +19,12 @@ command-line interface (*CLI*) is heavily tailored after
    info_file
    library_structure
    database_structure
+   papis_id
+   citations
    commands
    web-application
    gui
+   editors
    hooks
    scripting
    api
@@ -30,6 +33,7 @@ command-line interface (*CLI*) is heavily tailored after
    scihub
    importing
    shell_completion
+   developer_reference
    faq
 
 

@@ -1,31 +1,47 @@
+import os
+import pytest
+
 import papis.downloaders
+from papis.downloaders.projecteuclid import Downloader
 
-from unittest.mock import patch
-from tests.downloaders import get_resource, get_json_resource
+from tests.testlib import TemporaryConfiguration, ResourceCache
+
+PROJECT_EUCLID_URLS = (
+    "https://projecteuclid.org/journals/advances-in-differential-equations/volume-19/"
+    "issue-3_2f_4/An-analysis-of-the-renormalization-group-method-for-asymptotic"
+    "-expansions/ade/1391109086.short",
+    #
+    "https://projecteuclid.org/journals/duke-mathematical-journal/volume-164/"
+    "issue-13/Delocalization-of-eigenvectors-of-random-matrices-with-independent"
+    "-entries/10.1215/00127094-3129809.short"
+    )
 
 
-def test_1():
-    url = "https://projecteuclid.org/journals/advances-in-differential-equations/volume-19/issue-3_2f_4/An-analysis-of-the-renormalization-group-method-for-asymptotic-expansions/ade/1391109086.short"      # noqa: E501
+@pytest.mark.resource_setup(cachedir="downloaders/resources")
+@pytest.mark.parametrize("url", PROJECT_EUCLID_URLS)
+def test_project_euclid_fetch(tmp_config: TemporaryConfiguration,
+                              resource_cache: ResourceCache,
+                              monkeypatch: pytest.MonkeyPatch,
+                              url: str) -> None:
+    cls = papis.downloaders.get_downloader_by_name("projecteuclid")
+    assert cls is Downloader
 
-    downs = papis.downloaders.get_matching_downloaders(url)
-    down, = (d for d in downs if d.name == "projecteuclid")
+    down = cls.match(url)
+    assert down is not None
 
-    # import os
-    # with open(os.path.join(
-    #         os.path.dirname(__file__),
-    #         "resources", "projecteuclid_1.html"), "w") as f:
-    #     f.write(down._get_body().decode())
+    uid = os.path.basename(url[:-6]).replace("-", "_")
+    infile = "ProjectEuclid_{}.html".format(uid)
+    outfile = "ProjectEuclid_{}_Out.json".format(uid)
 
-    with patch.object(down, "_get_body",
-            lambda: get_resource("projecteuclid_1.html")):
-        with patch.object(down, "download_document", lambda: None):
-            down.fetch()
+    monkeypatch.setattr(down, "_get_body",
+                        lambda: resource_cache.get_remote_resource(infile, url))
+    monkeypatch.setattr(down, "download_document", lambda: None)
 
-            # with open(os.path.join(
-            #         os.path.dirname(__file__),
-            #         "resources", "projecteuclid_1_out.json"), "w+") as f:
-            #     import json
-            #     json.dump(down.ctx.data, f)
+    # NOTE: bibtex add some extra fields, so we just disable it for the test
+    monkeypatch.setattr(down, "download_bibtex", lambda: None)
 
-            ref_data = get_json_resource("projecteuclid_1_out.json")
-            assert down.ctx.data == ref_data
+    down.fetch()
+    extracted_data = down.ctx.data
+    expected_data = resource_cache.get_local_resource(outfile, extracted_data)
+
+    assert extracted_data == expected_data

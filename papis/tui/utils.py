@@ -1,6 +1,54 @@
 import re
 from typing import Optional, List, Callable, Any
 
+import click
+
+# Highlighting style used by pygments. This is a copy of the prompt_toolkit
+# default style, but changed to use ansi colors.
+PAPIS_PYGMENTS_DEFAULT_STYLE = {
+    "pygments.whitespace": "ansigray",
+    "pygments.comment": "italic ansigreen",
+    "pygments.comment.preproc": "noitalic ansiyellow",
+    "pygments.keyword": "bold ansigreen",
+    "pygments.keyword.pseudo": "nobold",
+    "pygments.keyword.type": "nobold ansired",
+    "pygments.operator": "ansigray",
+    "pygments.operator.word": "bold ansimagenta",
+    "pygments.name.builtin": "ansigreen",
+    "pygments.name.function": "ansicyan",
+    "pygments.name.class": "bold ansicyan",
+    "pygments.name.namespace": "bold ansicyan",
+    "pygments.name.exception": "bold ansired",
+    "pygments.name.variable": "ansiblue",
+    "pygments.name.constant": "ansired",
+    "pygments.name.label": "ansigreen",
+    "pygments.name.entity": "bold ansigray",
+    "pygments.name.attribute": "ansigreen",
+    "pygments.name.tag": "bold ansigreen",
+    "pygments.name.decorator": "ansimagenta",
+    # NOTE: In Pygments, Token.String is an alias for Token.Literal.String,
+    #       and Token.Number as an alias for Token.Literal.Number.
+    "pygments.literal.string": "ansired",
+    "pygments.literal.string.doc": "italic",
+    "pygments.literal.string.interpol": "bold ansired",
+    "pygments.literal.string.escape": "bold ansired",
+    "pygments.literal.string.regex": "ansired",
+    "pygments.literal.string.symbol": "ansiblue",
+    "pygments.literal.string.other": "ansigreen",
+    "pygments.literal.number": "ansigray",
+    "pygments.generic.heading": "bold ansiblue",
+    "pygments.generic.subheading": "bold ansimagenta",
+    "pygments.generic.deleted": "ansired",
+    "pygments.generic.inserted": "ansigreen",
+    "pygments.generic.error": "ansired",
+    "pygments.generic.emph": "italic",
+    "pygments.generic.strong": "bold",
+    "pygments.generic.prompt": "bold ansiblue",
+    "pygments.generic.output": "ansigray",
+    "pygments.generic.traceback": "ansiblue",
+    "pygments.error": "border:ansired",
+}
+
 
 def confirm(prompt_string: str,
             yes: bool = True,
@@ -8,118 +56,39 @@ def confirm(prompt_string: str,
     """Confirm with user input
 
     :param prompt_string: Question or text that the user gets.
-    :type  prompt_string: str
     :param yes: If yes should be the default.
-    :type  yes: bool
     :returns: True if go ahead, False if stop
-    :rtype:  bool
-
     """
     result = prompt(prompt_string,
                     bottom_toolbar=bottom_toolbar,
-                    default='Y/n' if yes else 'y/N',
-                    validator_function=lambda x: x in 'YyNn',
+                    default="Y/n" if yes else "y/N",
+                    validator_function=lambda x: x in "YyNn",
                     dirty_message='Please, write either "y" or "n" to confirm')
     if yes:
-        return result not in 'Nn'
-    return result in 'Yy'
+        return result not in "Nn"
+    return result in "Yy"
 
 
-def text_area(title: str,
-              text: str,
-              lexer_name: str = "",
-              height: int = 10,
-              full_screen: bool = False) -> str:
+def text_area(text: str,
+              lexer_name: str = ""):
     """
-    Small implementation of an editor/pager for small pieces of text.
+    Small implementation of a pager for small pieces of text.
 
-    :param title: Title of the text_area
-    :type  title: str
-    :param text: Editable text
-    :type  text: str
-    :param lexer_name: If the editable text should be highlighted with
+    :param text: text
+    :param lexer_name: If the text should be highlighted with
         some kind of grammar, examples are ``yaml``, ``python`` ...
-    :type  lexer_name: str
-    :param height: Max height of the text area
-    :type  height: int
-    :param full_screen: Whether or not the text area should be full screen.
-    :type  full_screen: bool
     """
-    from prompt_toolkit import Application
-    from prompt_toolkit.enums import EditingMode
-    from prompt_toolkit.buffer import Buffer
-    from prompt_toolkit.layout.containers import HSplit, Window, WindowAlign
-    from prompt_toolkit.layout.controls import (
-        BufferControl, FormattedTextControl
-    )
-    from prompt_toolkit.layout.layout import Layout
-    from prompt_toolkit.utils import Event
-    from prompt_toolkit.layout import Dimension
-    from prompt_toolkit.key_binding import KeyBindings
-    from prompt_toolkit.lexers import PygmentsLexer
     from pygments.lexers import find_lexer_class_by_name
 
-    kb = KeyBindings()
-    buffer1 = Buffer()
-    buffer1.text = text
-
-    @kb.add('c-q')  # type: ignore
-    def exit_(event: Event) -> None:
-        event.app.exit(0)
-
-    @kb.add('c-s')  # type: ignore
-    def save_(event: Event) -> None:
-        event.app.return_text = buffer1.text
-
-    class App(Application):  # type: ignore
-        # TODO: add stubs to be able to remove type ignore above
-        return_text = ""  # type: str
-
-    text_height = Dimension(min=0, max=height) if height is not None else None
-
+    import pygments
+    from prompt_toolkit import print_formatted_text
     pygment_lexer = find_lexer_class_by_name(lexer_name)
-    lexer = PygmentsLexer(pygment_lexer)
-    text_window = Window(height=text_height,
-                         style='bg:black fg:ansiwhite',
-                         content=BufferControl(buffer=buffer1, lexer=lexer))
+    tokens = list(pygments.lex(text, lexer=pygment_lexer()))
+    from prompt_toolkit.formatted_text import PygmentsTokens
 
-    root_container = HSplit([
-        Window(
-            align=WindowAlign.LEFT,
-            style='bg:ansiwhite',
-            height=1,
-            content=FormattedTextControl(
-                text=[('fg:ansiblack bg:ansiwhite', title)]
-            ),
-            always_hide_cursor=True
-        ),
-
-        text_window,
-
-        Window(
-            height=1,
-            width=None,
-            align=WindowAlign.LEFT,
-            style='bg:ansiwhite',
-            content=FormattedTextControl(
-                text=[(
-                    'fg:ansiblack bg:ansiwhite',
-                    "Quit [Ctrl-q]  Save [Ctrl-s]"
-                )]
-            )
-        ),
-    ])
-
-    layout = Layout(root_container)
-
-    layout.focus(text_window)
-
-    app = App(editing_mode=EditingMode.EMACS,
-              layout=layout,
-              key_bindings=kb,
-              full_screen=full_screen)
-    app.run()
-    return app.return_text
+    from prompt_toolkit.styles import Style
+    papis_style = Style.from_dict(PAPIS_PYGMENTS_DEFAULT_STYLE)
+    print_formatted_text(PygmentsTokens(tokens), style=papis_style)
 
 
 def yes_no_dialog(title: str, text: str) -> Any:
@@ -127,10 +96,10 @@ def yes_no_dialog(title: str, text: str) -> Any:
     from prompt_toolkit.styles import Style
 
     example_style = Style.from_dict({
-        'dialog': 'bg:#88ff88',
-        'dialog frame-label': 'bg:#ffffff #000000',
-        'dialog.body': 'bg:#000000 #00ff00',
-        'dialog shadow': 'bg:#00aa00',
+        "dialog": "bg:#88ff88",
+        "dialog frame-label": "bg:#ffffff #000000",
+        "dialog.body": "bg:#000000 #00ff00",
+        "dialog shadow": "bg:#00aa00",
     })
 
     return yes_no_dialog(title=title, text=text, style=example_style)
@@ -146,12 +115,8 @@ def prompt(
     """Prompt user for input
 
     :param prompt_string: Question or text that the user gets.
-    :type  prompt_string: str
     :param default: Default value to give if the user does not input anything
-    :type  default: str
     :returns: User input or default
-    :rtype:  bool
-
     """
     import prompt_toolkit
     import prompt_toolkit.validation
@@ -165,9 +130,9 @@ def prompt(
         validator = None
 
     fragments = [
-        ('', prompt_string),
-        ('fg:red', ' ({0})'.format(default)),
-        ('', ': '),
+        ("", prompt_string),
+        ("fg:ansired", " ({})".format(default)),
+        ("", ": "),
     ]
 
     result = prompt_toolkit.prompt(fragments,
@@ -176,14 +141,14 @@ def prompt(
                                    bottom_toolbar=bottom_toolbar,
                                    validate_while_typing=True)
 
-    return str(result) if result else default
+    return result or default
 
 
 def get_range(range_str: str) -> List[int]:
     range_regex = re.compile(r"(\d+)-?(\d+)?")
     try:
         return sum([
-            list(range(int(p[0]), int(p[1] if p[1] else p[0])+1))
+            list(range(int(p[0]), int(p[1] if p[1] else p[0]) + 1))
             for p in range_regex.findall(range_str)], [])
     except ValueError:
         return []
@@ -194,7 +159,7 @@ def select_range(options: List[Any],
                  accept_none: bool = False,
                  bottom_toolbar: Optional[str] = None) -> List[int]:
     for i, o in enumerate(options):
-        print("{i}. {o}".format(i=i, o=o))
+        click.echo("{i}. {o}".format(i=i, o=o))
 
     possible_indices = range(len(options))
     all_keywords = ["all", "a"]

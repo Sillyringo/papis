@@ -1,158 +1,152 @@
 import os
-import unittest
-from unittest.mock import patch
-import tests
-import papis.config
-from papis.commands.rm import run, cli
+import pytest
+from _pytest.monkeypatch import MonkeyPatch
+
+import papis.database
+
+from tests.testlib import TemporaryLibrary, PapisRunner
 
 
-class Test(unittest.TestCase):
+def test_rm_run(tmp_library: TemporaryLibrary) -> None:
+    from papis.commands.rm import run
 
-    @classmethod
-    def setUpClass(self):
-        tests.setup_test_library()
+    db = papis.database.get()
+    docs = db.get_all_documents()
+    folder = docs[0].get_main_folder()
+    assert os.path.exists(folder)
 
-    def test_rm_document(self):
-        db = papis.database.get()
-        docs = db.get_all_documents()
-        Ni = len(docs)
-        self.assertTrue(Ni > 0)
-        doc = docs[0]
-        run(doc)
-        docs = db.get_all_documents()
-        Nf = len(docs)
-        self.assertTrue(Ni - Nf > 0)
-
-    def test_rm_documents_file(self):
-        db = papis.database.get()
-        docs = db.get_all_documents()
-        doc = docs[0]
-        title = doc['title']
-        filename = 'test.txt'
-        path = os.path.join(doc.get_main_folder(), filename)
-
-        open(path, 'w+').close()
-        self.assertTrue(os.path.exists(path))
-
-        doc['files'] = [filename]
-        doc.save()
-
-        run(doc, filepath=path)
-        self.assertTrue(not os.path.exists(path))
-
-        doc = db.query_dict(dict(title=title))[0]
-        self.assertTrue(doc is not None)
-        self.assertTrue(doc['title'] == title)
-        self.assertTrue(len(doc.get_files()) == 0)
+    run(docs[0])
+    assert not os.path.exists(folder)
 
 
-class TestCli(tests.cli.TestCli):
+@pytest.mark.library_setup(use_git=True)
+def test_rm_files_run(tmp_library: TemporaryLibrary) -> None:
+    from papis.commands.rm import run
 
-    cli = cli
+    db = papis.database.get()
+    docs = db.get_all_documents()
+    doc = next(doc for doc in docs if "files" in doc)
+    assert "files" in doc
 
-    def test_1_no_documents(self):
-        result = self.invoke(['__no_document__'])
-        self.assertTrue(result.exit_code == 0)
+    title = doc["title"]
+    filename = doc.get_files()[0]
+    assert os.path.exists(filename)
 
-    @patch('papis.pick.pick_doc', lambda x: [])
-    def test_2_no_doc_picked(self):
-        result = self.invoke(['turing'])
-        self.assertTrue(result.exit_code == 0)
+    run(doc, filepath=filename, git=True)
+    assert not os.path.exists(filename)
 
-    def test_3_force(self):
-        db = papis.database.get()
-        result = self.invoke(['krishnamurti', '--force'])
-        self.assertTrue(result.exit_code == 0)
-        docs = db.query_dict(dict(author='krish'))
-        self.assertFalse(docs)
+    db.clear()
+    db.documents = None
 
-    @patch('papis.tui.utils.text_area', lambda **y: False)
-    @patch('papis.tui.utils.confirm', lambda *x, **y: False)
-    @patch('papis.pick.pick_doc', lambda x: [x[0]] if x else [])
-    def test_4_confirm(self):
-        db = papis.database.get()
-        docs = db.query_dict(dict(author='popper'))
-        self.assertTrue(len(docs) == 1)
-        result = self.invoke(['popper'])
-        self.assertTrue(result.exit_code == 0)
-        docs = db.query_dict(dict(author='popper'))
-        self.assertTrue(docs)
-
-    @patch('papis.tui.utils.text_area', lambda **y: False)
-    @patch('papis.tui.utils.confirm', lambda *x, **y: True)
-    @patch('papis.pick.pick_doc', lambda x: [x[0]] if x else [])
-    def test_5_confirm_true(self):
-        db = papis.database.get()
-        docs = db.query_dict(dict(author='popper'))
-        self.assertTrue(len(docs) == 1)
-        result = self.invoke(['popper'])
-        self.assertTrue(result.exit_code == 0)
-        docs = db.query_dict(dict(author='popper'))
-        self.assertFalse(docs)
-
-    @patch('papis.tui.utils.confirm', lambda *x, **y: True)
-    @patch('papis.pick.pick_doc', lambda x: [x[0]] if x else [])
-    @patch('papis.pick.pick', lambda x: [])
-    def test_7_confirm_file_nopick(self):
-        db = papis.database.get()
-        docs = db.query_dict(dict(author='turing'))
-        self.assertTrue(len(docs) == 1)
-        N = len(docs[0].get_files())
-        self.assertTrue(N > 0)
-
-        result = self.invoke(['turing', '--file'])
-        self.assertTrue(result.exit_code == 0)
-
-        docs = db.query_dict(dict(author='turing'))
-        self.assertTrue(len(docs) == 1)
-        Nf = len(docs[0].get_files())
-        self.assertTrue(N == Nf)
-
-    @patch('papis.tui.utils.confirm', lambda *x, **y: False)
-    @patch('papis.pick.pick_doc', lambda x: [x[0]] if x else [])
-    @patch('papis.pick.pick', lambda x: [x[0]] if x else [])
-    def test_6_confirm_file(self):
-        db = papis.database.get()
-        docs = db.query_dict(dict(author='turing'))
-        self.assertTrue(len(docs) == 1)
-        N = len(docs[0].get_files())
-        self.assertTrue(N > 0)
-
-        result = self.invoke(['turing', '--file'])
-        self.assertTrue(result.exit_code == 0)
-
-        docs = db.query_dict(dict(author='turing'))
-        self.assertTrue(len(docs) == 1)
-        Nf = len(docs[0].get_files())
-        self.assertTrue(N == Nf)
+    doc, = db.query_dict({"title": title})
+    assert doc["title"] == title
+    assert filename not in doc.get_files()
 
 
-    @patch('papis.tui.utils.confirm', lambda *x, **y: True)
-    @patch('papis.pick.pick_doc', lambda x: [x[0]] if x else [])
-    @patch('papis.pick.pick', lambda x: [x[0]] if x else [])
-    def test_confirm_true_file(self):
-        db = papis.database.get()
-        docs = db.query_dict(dict(author='turing'))
-        self.assertTrue(len(docs) == 1)
-        N = len(docs[0].get_files())
-        self.assertTrue(N > 0)
+def test_rm_cli(tmp_library: TemporaryLibrary, monkeypatch: MonkeyPatch) -> None:
+    import papis.tui.utils
+    from papis.commands.rm import cli
+    cli_runner = PapisRunner()
 
-        result = self.invoke(['turing', '--file'])
-        self.assertTrue(result.exit_code == 0)
+    db = papis.database.get()
+    doc, = db.query_dict({"author": "turing"})
+    folder = doc.get_main_folder()
+    assert os.path.exists(folder)
 
-        docs = db.query_dict(dict(author='turing'))
-        self.assertTrue(len(docs) == 1)
-        Nf = len(docs[0].get_files())
-        self.assertTrue(N == Nf+1)
+    with monkeypatch.context() as m:
+        m.setattr(papis.tui.utils, "text_area", lambda *args, **kwargs: None)
+        m.setattr(papis.tui.utils, "confirm", lambda *args: True)
+
+        result = cli_runner.invoke(
+            cli,
+            ["__no_document__"])
+        assert result.exit_code == 0
+
+        result = cli_runner.invoke(
+            cli,
+            ["turing"])
+        assert result.exit_code == 0
+        assert not os.path.exists(folder)
+
+        result = cli_runner.invoke(
+            cli,
+            ["krishnamurti"])
+        assert result.exit_code == 0
+
+    docs = db.query_dict({"author": "krishnamurti"})
+    assert not docs
 
 
-    def test_rm_all(self):
-        db = papis.database.get()
-        docs = db.query_dict(dict(author='test_author'))
-        self.assertTrue(len(docs) == 2)
+def test_rm_all_cli(tmp_library: TemporaryLibrary, monkeypatch: MonkeyPatch) -> None:
+    import papis.tui.utils
+    from papis.commands.rm import cli
+    cli_runner = PapisRunner()
+    db = papis.database.get()
 
-        result = self.invoke(['test_author', '--all', '--force'])
-        self.assertTrue(result.exit_code == 0)
+    with monkeypatch.context() as m:
+        m.setattr(papis.tui.utils, "confirm", lambda *args: True)
 
-        docs = db.query_dict(dict(author='test_author'))
-        self.assertTrue(len(docs) == 0)
+        result = cli_runner.invoke(
+            cli,
+            ["--all", "--force", "test_author"])
+        assert result.exit_code == 0
+
+    docs = db.query_dict({"author": "test_author"})
+    assert not docs
+
+
+@pytest.mark.parametrize("confirm", [True, False])
+def test_rm_confirm_cli(tmp_library: TemporaryLibrary,
+                        monkeypatch: MonkeyPatch,
+                        confirm: bool) -> None:
+    import papis.tui.utils
+    from papis.commands.rm import cli
+    cli_runner = PapisRunner()
+
+    db = papis.database.get()
+    doc, = db.query_dict({"author": "krishnamurti"})
+    folder = doc.get_main_folder()
+    assert os.path.exists(folder)
+
+    with monkeypatch.context() as m:
+        m.setattr(papis.tui.utils, "text_area", lambda *args, **kwargs: None)
+        m.setattr(papis.tui.utils, "confirm", lambda *args: confirm)
+
+        result = cli_runner.invoke(
+            cli,
+            ["krishnamurti"])
+        assert result.exit_code == 0
+        assert os.path.exists(folder) == (not confirm)
+
+    docs = db.query_dict({"author": "krishnamurti"})
+    assert bool(docs) == (not confirm)
+
+
+@pytest.mark.parametrize("confirm", [True, False])
+@pytest.mark.parametrize("pick", [True, False])
+def test_rm_files_cli(tmp_library: TemporaryLibrary,
+                      monkeypatch: MonkeyPatch,
+                      confirm: bool, pick: bool) -> None:
+    import papis.pick
+    import papis.tui.utils
+
+    from papis.commands.rm import cli
+    cli_runner = PapisRunner()
+
+    db = papis.database.get()
+    doc, = db.query_dict({"author": "krishnamurti"})
+    filename, = doc.get_files()
+    assert os.path.exists(filename)
+
+    with monkeypatch.context() as m:
+        m.setattr(papis.tui.utils, "confirm", lambda *args, **kwargs: confirm)
+        m.setattr(papis.pick, "pick", lambda x, **k: [x[0]] if (x and pick) else [])
+
+        result = cli_runner.invoke(
+            cli,
+            ["--file", "krishnamurti"])
+        assert result.exit_code == 0
+        assert os.path.exists(filename) == (not confirm or not pick)
+
+    doc, = db.query_dict({"author": "krishnamurti"})
+    assert bool(doc.get_files()) == (not confirm or not pick)

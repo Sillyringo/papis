@@ -1,27 +1,22 @@
 import os
-import unittest
-import tests
-from papis.commands.rename import run
+
 import papis.database
 
+from tests.testlib import TemporaryLibrary
 
-class Test(unittest.TestCase):
 
-    @classmethod
-    def setUpClass(self):
-        tests.setup_test_library()
+def test_rename_run(tmp_library: TemporaryLibrary) -> None:
+    from papis.commands.rename import run
 
-    def get_docs(self):
-        db = papis.database.get()
-        return db.get_all_documents()
+    db = papis.database.get()
+    docs = db.get_all_documents()
+    doc = docs[0]
 
-    def test_simple_update(self):
-        docs = self.get_docs()
-        document = docs[0]
-        title = document['title']
-        new_name = 'Some title with spaces too'
-        run(document, new_name)
-        docs = papis.database.get().query_dict(dict(title=title))
-        self.assertTrue(len(docs) == 1)
-        self.assertEqual(docs[0].get_main_folder_name(), new_name)
-        self.assertTrue(os.path.exists(docs[0].get_main_folder()))
+    old_title = doc["title"]
+    new_name = "Some title with spaces too"
+
+    run(doc, new_name)
+
+    doc, = db.query_dict({"title": old_title})
+    assert doc.get_main_folder_name() == new_name
+    assert os.path.exists(doc.get_main_folder())

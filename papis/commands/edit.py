@@ -1,14 +1,14 @@
-"""This command edits the information of the documents.
-The editor used is defined by the ``editor`` configuration setting.
+"""
+This command edits the :ref:`info.yaml file <info-file>` of the documents.
+The editor used is defined by the :ref:`config-settings-editor` configuration
+setting.
 
+Command-line Interface
+^^^^^^^^^^^^^^^^^^^^^^
 
-Cli
-^^^
 .. click:: papis.commands.edit:cli
     :prog: papis edit
 """
-import os
-import logging
 from typing import Optional
 
 import click
@@ -25,15 +25,20 @@ import papis.cli
 import papis.strings
 import papis.git
 import papis.format
+import papis.notes
+import papis.logging
+from papis.exceptions import DocumentFolderNotFound
+
+logger = papis.logging.get_logger(__name__)
 
 
 def run(document: papis.document.Document,
         wait: bool = True,
         git: bool = False) -> None:
-    logger = logging.getLogger('run:edit')
     info_file_path = document.get_info_file()
     if not info_file_path:
-        raise Exception(papis.strings.no_folder_attached_to_document)
+        raise DocumentFolderNotFound(papis.document.describe(document))
+
     _old_dict = papis.document.to_dict(document)
     papis.utils.general_open(info_file_path, "editor", wait=wait)
     document.load()
@@ -41,7 +46,7 @@ def run(document: papis.document.Document,
 
     # If nothing changed there is nothing else to be done
     if _old_dict == _new_dict:
-        logger.debug("old and new are equal, doing nothing")
+        logger.debug("No changes made to the document.")
         return
 
     papis.database.get().update(document)
@@ -50,73 +55,29 @@ def run(document: papis.document.Document,
         papis.git.add_and_commit_resource(
             str(document.get_main_folder()),
             info_file_path,
-            "Update information for '{0}'".format(
+            "Update information for '{}'".format(
                 papis.document.describe(document)))
-
-
-def create_notes(document: papis.document.Document,
-                 notes_path: str,
-                 notext: bool) -> None:
-
-    templ_path = os.path.expanduser(papis.config.getstring("notes-template"))
-    templ_out = ""
-
-    if os.path.exists(templ_path):
-        with open(templ_path, 'r') as f:
-            templ_src = f.read()
-            templ_out = papis.format.format(templ_src, document)
-
-        if (not notext) and document.has('files'):
-            import re
-            from pdfminer.high_level import extract_text
-                
-            for file in document.get_files():
-                pdf_text = extract_text(file)
-                
-                for mobj in list(reversed(list(re.finditer('[^\s] *\n *[^\s]', pdf_text)))):
-                    pdf_text = pdf_text[:mobj.start() + 1] + ' ' + pdf_text[mobj.end() - 1:]
-
-                templ_out += pdf_text
-
-    with open(notes_path, 'w+') as f:
-        f.write(templ_out)
 
 
 def edit_notes(document: papis.document.Document,
                git: bool = False,
-               notext: bool = False) -> None:
-    logger = logging.getLogger('edit:notes')
-    logger.debug("Editing notes")
-
-    db = papis.database.get()
-    if not document.has("notes"):
-        notes_name = papis.config.getstring("notes-name")
-        notes_name = papis.format.format(notes_name, document)
-        document["notes"] = papis.utils.clean_document_name(notes_name)
-        document.save()
-        db.update(document)
-
-    notes_path = os.path.join(
-        str(document.get_main_folder()),
-        document["notes"]
-    )
-
-    if not os.path.exists(notes_path):
-        logger.debug("Creating '%s'", notes_path)
-        create_notes(document, notes_path, notext = notext)
-
+               notext: bool = True) -> None:
+    logger.debug("Editing notes.")
+    notes_path = papis.notes.notes_path_ensured(document, notext = notext)
     papis.api.edit_file(notes_path)
     if git:
-        papis.git.add_and_commit_resource(
-            str(document.get_main_folder()),
-            str(document.get_info_file()),
-            "Update notes for '{0}'".format(
-                papis.document.describe(document)))
+        msg = "Update notes for '{}'".format(papis.document.describe(document))
+        folder = document.get_main_folder()
+        if folder:
+            papis.git.add_and_commit_resources(folder,
+                                               [notes_path,
+                                                document.get_info_file()],
+                                               msg)
 
 
-@click.command("edit")
-@click.help_option('-h', '--help')
-@papis.cli.query_option()
+@click.command("edit")                  # type: ignore[arg-type]
+@click.help_option("-h", "--help")
+@papis.cli.query_argument()
 @papis.cli.doc_folder_option()
 @papis.cli.git_option(help="Add changes made to the info file")
 @papis.cli.sort_option()
@@ -147,26 +108,17 @@ def cli(query: str,
         sort_field: Optional[str],
         sort_reverse: bool) -> None:
     """Edit document information from a given library"""
-
-    logger = logging.getLogger('cli:edit')
-
-    if doc_folder:
-        documents = [papis.document.from_folder(doc_folder)]
-    else:
-        documents = papis.database.get().query(query)
-
-    if sort_field:
-        documents = papis.document.sort(documents, sort_field, sort_reverse)
-
-    if editor is not None:
-        papis.config.set('editor', editor)
-
-    if not _all:
-        documents = list(papis.pick.pick_doc(documents))
-
-    if len(documents) == 0:
+    documents = papis.cli.handle_doc_folder_query_all_sort(query,
+                                                           doc_folder,
+                                                           sort_field,
+                                                           sort_reverse,
+                                                           _all)
+    if not documents:
         logger.warning(papis.strings.no_documents_retrieved_message)
         return
+
+    if editor is not None:
+        papis.config.set("editor", editor)
 
     for document in documents:
         if notes:

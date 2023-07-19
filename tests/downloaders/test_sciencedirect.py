@@ -1,46 +1,56 @@
+import os
+import pytest
+
 import papis.downloaders
-from papis.downloaders.sciencedirect import Downloader, get_author_list
-from unittest.mock import patch
-from tests.downloaders import get_resource, get_json_resource
-import logging
-logging.basicConfig(level=logging.DEBUG)
+from papis.downloaders.sciencedirect import Downloader
+
+from tests.testlib import TemporaryConfiguration, ResourceCache
+
+SCIENCE_DIRECT_URLS = (
+    "https://www.sciencedirect.com/science/article/abs/pii/S0009261497040141",
+    "https://www.sciencedirect.com/science/article/abs/pii/S2210271X18305656",
+    )
 
 
-def test_match():
-    assert(Downloader.match(
-        'https://www.sciencedirect.com/science/article/pii/S0009261497040141'
-    ))
-    assert(Downloader.match(
-        'https://www.sciencedirect.com/science/article/pii/S2210271X18305656'
-    ))
+def test_sciencedirect_match(tmp_config: TemporaryConfiguration) -> None:
+    valid_urls = (
+        "https://www.sciencedirect.com",
+        "http://www.sciencedirect.com/science/article/pii/S0009261497040141",
+        ) + SCIENCE_DIRECT_URLS
+    invalid_urls = {
+        "https://www.scienceindirect.com",
+        "http://www.sciencedirect.co.uk/science/article/pii/S0009261497040141",
+        }
+
+    for url in valid_urls:
+        assert isinstance(Downloader.match(url), Downloader)
+
+    for url in invalid_urls:
+        assert Downloader.match(url) is None
 
 
-def test_1():
-    url = 'https://www.sciencedirect.com/science/article/pii/bguss1'
-    down = papis.downloaders.get_downloader(url)
-    assert(not down.ctx)
-    with patch.object(down, '_get_body',
-            lambda: get_resource('sciencedirect_1.html')):
-        with patch.object(down, 'download_document', lambda: None):
-            down.fetch()
-            correct_data = get_json_resource('sciencedirect_1_out.json')
-            assert(down.ctx.data == correct_data)
+@pytest.mark.resource_setup(cachedir="downloaders/resources")
+@pytest.mark.parametrize("url", SCIENCE_DIRECT_URLS)
+def test_sciencedirect_fetch(tmp_config: TemporaryConfiguration,
+                             resource_cache: ResourceCache,
+                             monkeypatch: pytest.MonkeyPatch,
+                             url: str) -> None:
+    cls = papis.downloaders.get_downloader_by_name("sciencedirect")
+    assert cls is Downloader
 
+    down = cls.match(url)
+    assert down is not None
 
-def test_2():
-    url = 'https://www.sciencedirect.com/science/article/pii/bogus'
-    down = papis.downloaders.get_downloader(url)
-    assert(not down.ctx)
-    with patch.object(down, '_get_body',
-            lambda: get_resource('sciencedirect_2.html')):
-        with patch.object(down, 'download_document', lambda: None):
-            down.fetch()
-            correct_data = get_json_resource('sciencedirect_2_out.json')
-            assert(down.ctx.data == correct_data)
+    uid = os.path.basename(url)
+    infile = "ScienceDirect_{}.html".format(uid)
+    outfile = "ScienceDirect_{}_Out.json".format(uid)
 
+    monkeypatch.setattr(down, "_get_body",
+                        lambda: resource_cache.get_remote_resource(infile, url))
+    monkeypatch.setattr(down, "download_document", lambda: None)
 
-def test_get_authors():
-    rawdata = get_json_resource('sciencedirect_1_authors.json')
-    correct_data = get_json_resource('sciencedirect_1_authors_out.json')
-    data = get_author_list(rawdata)
-    assert(correct_data == data)
+    down.fetch()
+    extracted_data = down.ctx.data
+    expected_data = resource_cache.get_local_resource(outfile, extracted_data)
+
+    assert extracted_data == expected_data

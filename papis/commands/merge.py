@@ -1,18 +1,22 @@
 """
-Merge two documents that might be potentially repeated.
+Merge two documents that might be potentially duplicated.
 
-If your papis picker do not support selecting two items, then
-pass the ``--pick`` flag to pick twice for the documents.
+If your papis picker does not support selecting two items, then
+pass the ``--pick`` flag to pick twice from the documents.
 
-TODO: Write more documentation
+Examples
+^^^^^^^^
 
-Cli
-^^^
+TODO
+
+Command-line Interface
+^^^^^^^^^^^^^^^^^^^^^^
+
 .. click:: papis.commands.merge:cli
-    :prog: papis open
+    :prog: papis merge
 """
+
 import os
-import logging
 from typing import Optional, List, Dict, Any
 
 import click
@@ -29,6 +33,9 @@ import papis.format
 import papis.strings
 import papis.commands.rm
 import papis.commands.update
+import papis.logging
+
+logger = papis.logging.get_logger(__name__)
 
 
 def run(keep: papis.document.Document,
@@ -38,31 +45,30 @@ def run(keep: papis.document.Document,
         keep_both: bool,
         git: bool = False) -> None:
 
-    logger = logging.getLogger('merge:run')
     files_to_move = set(files) - set(keep.get_files())
     for f in files_to_move:
         to_folder = keep.get_main_folder()
         if to_folder:
             import shutil
-            logger.info("Moving %s", f)
+            logger.info("Moving '%s' to '%s'.", f, to_folder)
             shutil.copy(f, to_folder)
             keep["files"] += [os.path.basename(f)]
     papis.commands.update.run(keep, data, git=git)
 
     if not keep_both:
-        logger.info("Removing '%s'", erase)
+        logger.info("Removing '%s'.", papis.document.describe(erase))
         papis.commands.rm.run(erase, git=git)
     else:
-        logger.info("Keeping both documents")
+        logger.info("Keeping both documents.")
 
 
 @click.command("merge")
-@click.help_option('-h', '--help')
-@papis.cli.query_option()
+@click.help_option("-h", "--help")
+@papis.cli.query_argument()
 @papis.cli.sort_option()
 @click.option("-s",
               "--second",
-              help="Keep the second document after merge and erase the first,"
+              help="Keep the second document after merge and erase the first, "
                    "the default is keep the first",
               default=False,
               is_flag=True)
@@ -92,8 +98,6 @@ def cli(query: str,
         sort_reverse: bool,
         pick: bool) -> None:
     """Merge two documents from a given library"""
-    logger = logging.getLogger('cli:merge')
-
     documents = papis.database.get().query(query)
 
     if sort_field:
@@ -111,8 +115,8 @@ def cli(query: str,
 
     if len(documents) != 2:
         logger.error(
-                "You have to pick exactly two documents (picked %d)!",
-                len(documents))
+            "You have to pick exactly two documents (picked %d)!",
+            len(documents))
         return
 
     a = documents[0]
@@ -121,7 +125,7 @@ def cli(query: str,
     data_b = papis.document.to_dict(b)
 
     to_pop = ["files"]
-    for d in [data_a, data_b]:
+    for d in (data_a, data_b):
         for key in to_pop:
             if key in d:
                 d.pop(key)
@@ -130,7 +134,7 @@ def cli(query: str,
                                                    data_b,
                                                    papis.document.describe(b))
 
-    files = []  # type: List[str]
+    files: List[str] = []
     for doc in documents:
         indices = papis.tui.utils.select_range(
             doc.get_files(),
@@ -140,7 +144,6 @@ def cli(query: str,
         files += [doc.get_files()[i] for i in indices]
 
     if not papis.tui.utils.confirm("Are you sure you want to merge?"):
-        logger.info("Exiting safely")
         return
 
     keep = b if second else a
@@ -157,7 +160,7 @@ def cli(query: str,
             keep["files"] += [os.path.basename(f)]
         keep.update(data_a)
         keep.save()
-        logger.info("Saving the new document in '%s'", out)
+        logger.info("Saving the new document in '%s'.", out)
         return
 
     run(keep, erase, data_a, files, keep_both, git)

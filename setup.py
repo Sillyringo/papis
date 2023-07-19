@@ -1,177 +1,214 @@
-# -*- coding: utf-8 -*-
 #
 # you can install this to a local test virtualenv like so:
 #   virtualenv venv
 #   ./venv/bin/pip install --editable .
 #   ./venv/bin/pip install --editable .[dev]  # with dev requirements, too
 
+import os
 import sys
 import glob
+
 from setuptools import setup, find_packages
+
 import papis
 
-with open('README.rst') as fd:
+with open("README.rst") as fd:
     long_description = fd.read()
 
-if sys.platform == 'win32':
+if sys.platform == "win32":
     data_files = []
 else:
-    data_files = [
+    # NOTE: see the documentation for 'bash-completion' at
+    #   https://github.com/scop/bash-completion/blob/master/README.md#faq
+    bash_completion_dir = os.environ.get(
+        "PAPIS_BASH_COMPLETION_DIR", "share/bash-completion/completions")
+    # NOTE: see the documentation for 'fish' at
+    #   https://fishshell.com/docs/current/completions.html#where-to-put-completions
+    fish_completion_dir = os.environ.get(
+        "PAPIS_FISH_COMPLETION_DIR", "share/fish/vendor_completions.d")
+    # NOTE: 'site-functions' is included by default since zsh 5.0.7, see
+    #   https://zsh.sourceforge.io/releases.html
+    zsh_completion_dir = os.environ.get(
+        "PAPIS_ZSH_COMPLETION_DIR", "share/zsh/site-functions")
 
+    data_files = [
         ("share/doc/papis", [
             "README.rst",
             "CHANGELOG.md",
             "AUTHORS",
-            "LICENSE.txt",
+            "LICENSE",
         ]),
 
-        ("etc/bash_completion.d/", [
-            "scripts/shell_completion/click/papis.sh",
-        ]),
-
-        ("share/zsh/site-functions/", [
-            "scripts/shell_completion/click/zsh/_papis",
-        ]),
+        (bash_completion_dir, ["scripts/shell_completion/click/bash/papis.bash"]),
+        (fish_completion_dir, ["scripts/shell_completion/click/fish/papis.fish"]),
+        (zsh_completion_dir, ["scripts/shell_completion/click/zsh/_papis"]),
 
         ("share/man/man1", glob.glob("doc/build/man/*")),
-
-        ("share/applications", [
-            "contrib/papis.desktop",
-        ]),
-
+        ("share/applications", ["contrib/papis.desktop"]),
     ]
 
-included_packages = ['papis'] + ['papis.' + p for p in find_packages('papis')]
+included_packages = ["papis"] + ["papis." + p for p in find_packages("papis")]
 
 setup(
-    name='papis',
+    name="papis",
     version=papis.__version__,
-    maintainer='Alejandro Gallo',
-    maintainer_email='aamsgallo@gmail.com',
+    maintainer="Alejandro Gallo",
+    maintainer_email="aamsgallo@gmail.com",
     author=papis.__author__,
     author_email=papis.__email__,
     license=papis.__license__,
-    url='https://github.com/papis/papis',
+    url="https://github.com/papis/papis",
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Environment :: Console",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Education",
+        "Intended Audience :: Science/Research",
+        "Intended Audience :: End Users/Desktop",
+        "Intended Audience :: System Administrators",
+        "Natural Language :: English",
+        "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+        "Operating System :: MacOS",
+        "Operating System :: POSIX",
+        "Operating System :: Unix",
+        "Operating System :: Microsoft",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Topic :: Utilities",
+    ],
     install_requires=[
-        "requests>=2.11.1",
-        "filetype>=1.0.1",
-        "pyparsing>=2.2.0",
-        "configparser>=3.0.0",
-        "arxiv2bib>=1.0.7",
         "PyYAML>=3.12",
-        "chardet>=3.0.2",
+        "arxiv2bib>=1.0.7",
         "beautifulsoup4>=4.4.1",
-        "colorama>=0.2",
         "bibtexparser>=0.6.2",
+        "chardet>=3.0.2",
         "click>=7.0.0",
+        "colorama>=0.2",
+        "dominate",
+        "filetype>=1.0.1",
         "habanero>=0.6.0",
         "isbnlib>=3.9.1",
+        "lxml>=4.3.5",
         "prompt_toolkit>=2.0.5",
-        "tqdm>=4.1",
         "pygments>=2.2.0",
-        "stevedore>=1.30",
+        "pyparsing>=2.2.0",
         "python-doi>=0.1.1",
-        "typing-extensions>=3.7 ; python_version<'3.8'",
-        "lxml>=4.3.5 ; python_version>'3.5'",
-        "python-slugify>=1.2.6 ; python_version>'3.4'",
+        "python-slugify>=1.2.6",
+        "requests>=2.11.1",
+        "stevedore>=1.30",
+        "tqdm>=4.1",
     ],
-    python_requires='>=3.5',
-    classifiers=[
-        'Development Status :: 4 - Beta',
-        'Environment :: Console',
-        'Intended Audience :: Developers',
-        'Intended Audience :: Education',
-        'Intended Audience :: Science/Research',
-        'Intended Audience :: End Users/Desktop',
-        'Intended Audience :: System Administrators',
-        'Natural Language :: English',
-        'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
-        'Operating System :: MacOS',
-        'Operating System :: POSIX',
-        'Operating System :: Unix',
-        'Operating System :: Microsoft',
-        'Operating System :: OS Independent',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
-        'Programming Language :: Python :: 3.10',
-        'Topic :: Utilities',
-    ],
-    extras_require=dict(
+    python_requires=">=3.8",
+    extras_require={
         # List additional groups of dependencies here (e.g. development
         # dependencies). You can install these using the following syntax,
         # for example:
         # $ pip install -e .[develop]
-        optional=[
+        "optional": [
             "Whoosh>=2.7.4",
         ],
-        develop=[
-            'sphinx-click',
-            'sphinx_rtd_theme',
-            'pytest-cov',
-            'mypy>=0.7',
-        ]
-    ),
+        "develop": [
+            "flake8-bugbear",
+            "flake8-quotes",
+            "flake8",
+            "mypy>=0.7",
+            "pep8-naming",
+            "pylint",
+            "pytest",
+            "pytest-cov",
+            "python-coveralls",
+            "python-lsp-server",
+            "sphinx-click",
+            "sphinx_rtd_theme",
+            "types-PyYAML",
+            "types-Pygments",
+            "types-beautifulsoup4",
+            "types-python-slugify",
+            "types-requests",
+            "types-tqdm",
+        ],
+    },
     description=(
-        'Powerful and highly extensible command-line based document '
-        'and bibliography manager'
+        "Powerful and highly extensible command-line based document "
+        "and bibliography manager"
     ),
     long_description=long_description,
     keywords=[
-        'document', 'crossref', 'libgen', 'scihub', 'physics', 'mathematics',
-        'books', 'papers', 'science', 'research',
-        'bibtex', 'latex', 'command-line', 'tui', 'biblatex', 'pubmed', 'ieee',
-        'reference manager', 'mendeley', 'zotero', 'elsevier',
-        'cli', 'biliography', 'datasheets', 'bibtex'
+        "biblatex",
+        "bibtex",
+        "biliography",
+        "books",
+        "cli",
+        "command-line",
+        "crossref",
+        "datasheets",
+        "document",
+        "elsevier",
+        "ieee",
+        "latex",
+        "libgen",
+        "mathematics",
+        "mendeley",
+        "papers",
+        "physics",
+        "pubmed",
+        "reference manager",
+        "research",
+        "science",
+        "scihub",
+        "tui",
+        "zotero",
     ],
     package_data=dict(
-        papis=[
-            "py.typed"
-        ],
+        papis=["py.typed"],
     ),
     data_files=data_files,
     packages=included_packages,
     entry_points={
-        'console_scripts': [
-            'papis=papis.commands.default:run',
+        "console_scripts": [
+            "papis=papis.commands.default:run",
         ],
-        "papis.hook.on_edit_done" : [
+        "papis.hook.on_edit_done": [
         ],
-        'papis.exporter': [
-            'bibtex=papis.bibtex:exporter',
-            'json=papis.json:exporter',
-            'yaml=papis.yaml:exporter',
+        "papis.exporter": [
+            "bibtex=papis.bibtex:exporter",
+            "json=papis.json:exporter",
+            "typst=papis.hayagriva:exporter",
+            "yaml=papis.yaml:exporter",
         ],
-        'papis.importer': [
-            'bibtex=papis.bibtex:Importer',
-            'yaml=papis.yaml:Importer',
-            'doi=papis.crossref:Importer',
-            'crossref=papis.crossref:FromCrossrefImporter',
-            'pdf2doi=papis.crossref:DoiFromPdfImporter',
-            # 'url=papis.downloaders:Importer',
-            'arxiv=papis.arxiv:Importer',
-            'pdf2arxivid=papis.arxiv:ArxividFromPdfImporter',
-            'pmid=papis.pubmed:Importer',
-            'lib=papis.commands.add:FromLibImporter',
-            'folder=papis.commands.add:FromFolderImporter',
-            'isbn=papis.isbn:Importer',
+        "papis.importer": [
+            "arxiv=papis.arxiv:Importer",
+            "bibtex=papis.bibtex:Importer",
+            "crossref=papis.crossref:FromCrossrefImporter",
+            "dblp=papis.dblp:Importer",
+            "doi=papis.crossref:Importer",
+            "folder=papis.commands.add:FromFolderImporter",
+            "isbn=papis.isbn:Importer",
+            "lib=papis.commands.add:FromLibImporter",
+            "pdf2arxivid=papis.arxiv:ArxividFromPdfImporter",
+            "pdf2doi=papis.crossref:DoiFromPdfImporter",
+            "pmid=papis.pubmed:Importer",
+            "yaml=papis.yaml:Importer",
         ],
-        'papis.picker': [
-            'papis=papis.tui.picker:Picker',
-            'fzf=papis.fzf:Picker',
+        "papis.picker": [
+            "fzf=papis.fzf:Picker",
+            "papis=papis.tui.picker:Picker",
         ],
-        'papis.format': [
-            'python=papis.format:PythonFormater',
-            'jinja2=papis.format:Jinja2Formater',
+        "papis.format": [
+            "jinja2=papis.format:Jinja2Formater",
+            "python=papis.format:PythonFormater",
         ],
-        'papis.command': [
+        "papis.command": [
             "add=papis.commands.add:cli",
             "addto=papis.commands.addto:cli",
             "bibtex=papis.commands.bibtex:cli",
             "browse=papis.commands.browse:cli",
+            "citations=papis.commands.citations:cli",
             "config=papis.commands.config:cli",
+            "doctor=papis.commands.doctor:cli",
             "edit=papis.commands.edit:cli",
             "exec=papis.commands.exec:cli",
             "explore=papis.commands.explore:cli",
@@ -187,45 +224,45 @@ setup(
             "serve=papis.commands.serve:cli",
             "update=papis.commands.update:cli",
         ],
-        'papis.downloader': [
-            "acs=papis.downloaders.acs:Downloader",
+        "papis.downloader": [
             "acm=papis.downloaders.acm:Downloader",
+            "acs=papis.downloaders.acs:Downloader",
             "annualreviews=papis.downloaders.annualreviews:Downloader",
-            "citeseerx=papis.downloaders.citeseerx:Downloader",
             "aps=papis.downloaders.aps:Downloader",
+            "arxiv=papis.arxiv:Downloader",
+            "citeseerx=papis.downloaders.citeseerx:Downloader",
+            "doi=papis.crossref:Downloader",
+            "fallback=papis.downloaders.fallback:Downloader",
             "frontiersin=papis.downloaders.frontiersin:Downloader",
             "get=papis.downloaders.get:Downloader",
             "hal=papis.downloaders.hal:Downloader",
-            "doi=papis.crossref:Downloader",
             "ieee=papis.downloaders.ieee:Downloader",
-            "sciencedirect=papis.downloaders.sciencedirect:Downloader",
-            "tandfonline=papis.downloaders.tandfonline:Downloader",
-            "springer=papis.downloaders.springer:Downloader",
             "iopscience=papis.downloaders.iopscience:Downloader",
+            "projecteuclid=papis.downloaders.projecteuclid:Downloader",
+            "sciencedirect=papis.downloaders.sciencedirect:Downloader",
             "scitationaip=papis.downloaders.scitationaip:Downloader",
+            "springer=papis.downloaders.springer:Downloader",
+            "tandfonline=papis.downloaders.tandfonline:Downloader",
             "thesesfr=papis.downloaders.thesesfr:Downloader",
             "worldscientific=papis.downloaders.worldscientific:Downloader",
-            "fallback=papis.downloaders.fallback:Downloader",
-            "arxiv=papis.arxiv:Downloader",
-            "projecteuclid=papis.downloaders.projecteuclid:Downloader",
+            "usenix=papis.downloaders.usenix:Downloader",
         ],
-        'papis.explorer': [
-            "lib=papis.commands.explore:lib",
+        "papis.explorer": [
             "add=papis.commands.explore:add",
+            "arxiv=papis.arxiv:explorer",
+            "bibtex=papis.bibtex:explorer",
             "citations=papis.commands.explore:citations",
             "cmd=papis.commands.explore:cmd",
-            "pick=papis.commands.explore:pick",
-            "arxiv=papis.arxiv:explorer",
             "crossref=papis.crossref:explorer",
+            "dblp=papis.dblp:explorer",
             "dissemin=papis.dissemin:explorer",
-            "base=papis.base:explorer",
             "export=papis.commands.export:explorer",
             "isbn=papis.isbn:explorer",
-            "isbnplus=papis.isbnplus:explorer",
-            "yaml=papis.yaml:explorer",
             "json=papis.json:explorer",
-            "bibtex=papis.bibtex:explorer",
+            "lib=papis.commands.explore:lib",
+            "pick=papis.commands.explore:pick",
+            "yaml=papis.yaml:explorer",
         ]
     },
-    platforms=['linux', 'osx', 'win32'],
+    platforms=["linux", "osx", "win32"],
 )

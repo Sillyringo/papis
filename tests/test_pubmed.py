@@ -1,7 +1,11 @@
-import papis.pubmed
+import pytest
+from tests.testlib import TemporaryConfiguration
 
 
-def test_match():
+@pytest.mark.xfail(reason="remote pmid validity check can timeout")
+def test_match(tmp_config: TemporaryConfiguration) -> None:
+    import papis.pubmed
+
     assert papis.pubmed.Importer.match("28012456")
     assert papis.pubmed.Importer.match("5503630")
     assert papis.pubmed.Importer.match("   1397  ")

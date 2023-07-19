@@ -1,50 +1,42 @@
-from prompt_toolkit.layout.containers import to_container
-from prompt_toolkit.key_binding import KeyBindings
-
-from papis.tui.widgets.command_line_prompt import *
-from papis.tui.widgets import *
+import pytest
 
 
-def test_simple_command():
-    cmd = Command('test', lambda c: 1+1)
-    assert(cmd.app is not None)
+def test_simple_command() -> None:
+    from papis.tui.widgets.command_line_prompt import Command
+
+    cmd = Command("test", lambda c: 1 + 1)
+    assert cmd.app is not None
+
     r = cmd.run(cmd)
-    assert(r == 2)
-    assert(cmd.names == ['test'])
+    assert r == 2
+    assert cmd.names == ["test"]
 
-    cmd = Command('test', lambda c: 1+1, aliases=['t', 'e'])
-    assert(cmd.names == ['test', 't', 'e'])
+    cmd = Command("test", lambda c: 1 + 1, aliases=["t", "e"])
+    assert cmd.names == ["test", "t", "e"]
 
 
-
-def test_commandlineprompt():
-    cmds = [Command('test', lambda c: 1+1)]
+def test_command_line_prompt() -> None:
+    from papis.tui.widgets.command_line_prompt import Command, CommandLinePrompt
+    cmds = [Command("test", lambda c: 1 + 1)]
     prompt = CommandLinePrompt(commands=cmds)
-    prompt.text = 'test'
-    re = prompt.trigger()
-    assert(re is None)
-    try:
-        prompt.text = 'est'
-        e = prompt.trigger()
-    except Exception as e:
-        assert(str(e) == 'No command found (est)')
-    else:
-        assert(False)
 
-    prompt.text = ''
-    assert(prompt.trigger() is None)
+    prompt.text = "test"
+    prompt.trigger()
 
-    prompt.commands = 2*[Command('test', lambda c: 1+1)]
-
-    prompt.text = 'sdf asldfj dsafds'
-    prompt.clear()
-    assert(prompt.text == '')
-
-    prompt.text = 'test'
-    try:
+    prompt.text = "est"
+    with pytest.raises(Exception,
+                       match=r"No command found for 'est'"):
         prompt.trigger()
-    except Exception as e:
-        assert(str(e) == 'More than one command matches the input')
-    else:
-        assert(False)
 
+    prompt.text = ""
+    prompt.trigger()
+
+    prompt.commands = 2 * [Command("test", lambda c: 1 + 1)]
+    prompt.text = "sdf asldfj dsafds"
+    prompt.clear()
+    assert prompt.text == ""
+
+    prompt.text = "test"
+    with pytest.raises(Exception,
+                       match="More than one command matches the input"):
+        prompt.trigger()

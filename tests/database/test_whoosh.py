@@ -1,20 +1,30 @@
-import tests.database
 import papis.config
 import papis.database
 
-class Test(tests.database.DatabaseTest):
+import pytest
+from tests.testlib import TemporaryLibrary
 
-    @classmethod
-    def setUpClass(cls):
-        papis.config.set('database-backend', 'whoosh')
-        tests.database.DatabaseTest.setUpClass()
 
-    def test_backend_name(self):
-        self.assertTrue(papis.config.get('database-backend') == 'whoosh')
+def database_init(libname: str) -> None:
+    papis.config.set("database-backend", "whoosh", section=libname)
 
-    def test_query(self):
-        # The database is existing right now, which means that the
-        # test library is in place and therefore we have some documents
-        database = papis.database.get()
-        docs = database.query('*')
-        self.assertTrue(len(docs) > 0)
+    # ensure database exists for the library
+    db = papis.database.get(libname)
+    assert db is not None
+
+    # ensure that its clean
+    db.clear()
+    db.initialize()
+
+
+def test_database_query(tmp_library: TemporaryLibrary) -> None:
+    pytest.importorskip("whoosh")
+
+    database_init(tmp_library.libname)
+    db = papis.database.get()
+    assert db.get_backend_name() == "whoosh"
+
+    docs = db.query("*")
+    all_docs = db.get_all_documents()
+    assert len(docs) > 0
+    assert len(docs) == len(all_docs)

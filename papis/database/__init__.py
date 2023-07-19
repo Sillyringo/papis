@@ -1,12 +1,12 @@
-import logging
 from typing import Optional, Dict
 
 from .base import Database
 from papis.library import Library
+import papis.logging
 
-logger = logging.getLogger('database')
+logger = papis.logging.get_logger(__name__)
 
-DATABASES = dict()  # type: Dict[Library, Database]
+DATABASES: Dict[Library, Database] = {}
 
 
 def get(library_name: Optional[str] = None) -> Database:
@@ -16,7 +16,7 @@ def get(library_name: Optional[str] = None) -> Database:
         library = papis.config.get_lib()
     else:
         library = papis.config.get_lib_from_name(library_name)
-    backend = papis.config.get('database-backend') or 'papis'
+    backend = papis.config.get("database-backend") or "papis"
     try:
         database = DATABASES[library]
     except KeyError:
@@ -33,7 +33,7 @@ def _instantiate_database(backend_name: str, library: Library) -> Database:
         import papis.database.whoosh
         return papis.database.whoosh.Database(library)
     else:
-        raise Exception('No valid database type: {}'.format(backend_name))
+        raise ValueError("Invalid database backend: '{}'".format(backend_name))
 
 
 def get_all_query_string() -> str:
@@ -42,4 +42,4 @@ def get_all_query_string() -> str:
 
 def clear_cached() -> None:
     global DATABASES
-    DATABASES = dict()
+    DATABASES = {}

@@ -4,59 +4,138 @@ Guidelines for Code Modification
 Coding Style
 ------------
 
-* Use syntax compatible with Python `3.1+`.
-* Use docstrings with `sphinx` in mind
-* 4 spaces are the preferred indentation method.
-* No trailing white spaces are allowed.
-* Restrict each line of code to 80 characters.
-* Follow the PEP8 style guide: https://www.python.org/dev/peps/pep-0008/
-* Always run `make test` before submitting a new PR. You need to run
-  `pip3 install -e .[develop]` in the papis directory before running the
-  tests.
+* Use syntax compatible with Python `3.8+`.
+* Use docstrings with [Sphinx](https://www.sphinx-doc.org/en/master/) in mind.
+* Follow the [PEP8 style guide](https://www.python.org/dev/peps/pep-0008/)
+* Try and run tests locally before submitting a new PR.
 
+Development
+-----------
 
-Patches
--------
+For development, consider creating a new virtual environment (with any
+prefered method, e.g. [venv](https://docs.python.org/3/library/venv.html)).
+All development packages can be installed with
+```bash
+python -m pip install -e '.[develop]'
+```
 
-Send patches, created with `git format-patch`, to the email address
+To run the tests, just use `pytest`. Some helpful wrappers are given in the
+`Makefile` (see `make help`), e.g. to run the tests
+```bash
+make test
+```
+which runs the full test suite and doctests for `papis`. To run the tests exactly
+as they are set up on the Github Actions CI use
+```
+make ci-install
+make ci-test
+```
 
-    gallo@fkf.mpg.de
+The docs can be generated with
+```
+make doc
+```
 
-or open a pull request on GitHub.
+To quickly get things up and running, you can also use docker/podman:
 
+```
+# build the image
+docker build -t papisdev .
+# to run the CI tests
+docker run -v $(pwd):/papis --rm -it papisdev
+# enter the container interactively
+docker run -v $(pwd):/papis --rm -it papisdev bash
+```
+
+(or replace `docker` with `podman` if you prefer)
+
+Issues
+------
+
+You can open issues in the [GitHub issue tracker](https://github.com/papis/papis/issues).
 
 Version Numbering
 -----------------
 
-Three numbers, `A.B.C`, where
+The versioning scheme generally follows semantic versioning. That is, we
+have three numbers, `A.B.C`, where:
+
 * `A` changes on a rewrite
 * `B` changes when major configuration incompatibilities occur
 * `C` changes with each release (bug fixes..)
 
+Extending Papis
+===============
 
+Adding Configuration Options
+----------------------------
 
-Common Changes
-==============
+To add a new main option:
 
-Adding options
+- Add a default value in `defaults.py` in the `settings` dictionary.
+- Document the option in `doc/source/default-settings.rst`. Try to answer the
+  following questions:
+  - What is it?
+  - Where is it used?
+  - What type should it be?
+  - What values are allowed? (default values are added automatically)
+
+The setting is now accessible with `papis.config.get("myoption")`
+or through the command-line interface `papis config myoption`.
+
+To add a new option in a custom section (or generally with a common prefix)
+
+- Call `papis.config.register_default_settings` with a dictionary
+  `{"section": {"option1": "value", ...}}`.
+- Document the option in a similar fashion to above
+
+The setting can now be accessed with `papis.config.get("section-option1")`
+or `papis.config.get("option1", section="section")`.
+
+Adding Scripts
 --------------
 
-* Add a default value in `config.py`, along with a comment that describes the
-  option.
+Can add scripts for everyone to share to the folder `examples/scripts` in the
+repository. These scripts will not be shipped with papis, but they are there
+for other users to use and modify.
 
-The setting is now accessible with `papis.config.get('myoption')`
-or through the cli interface `papis config myoption`.
+Adding Importers
+----------------
 
+An importer is used to get data from a file or service into `papis`. For example,
+see the arXiv importers in `arxiv.py`. To add a new importer
 
-Adding scripts
---------------
+- Create a class that inherits from `papis.importer.Importer`.
+- Implement the `Importer.match` method, which is used to check if a given URI
+  can be handled by the importer.
+- Implement the `Importer.fetch` method, that gets the data. This method should
+  set the `Importer.ctx` attribute to contain the extracted information.
+- (Optional) Instead of the `fetch` method, you can also implement the `fetch_data`
+  and / or `fetch_files` methods separately.
 
-* You can add scripts for everyone to share to the folder
-  `examples/scripts/` in the repository. These scripts will not be shipped
-  with papis, but they are there for other users to use and modify.
+The importer is then registered with `papis` by adding it to `setup.py`. In the
+`entry_points` argument under `"papis.importer"` add
+```
+myimporter=papis.myservice:Importer
+```
+or see the existing examples.
 
-
-Adding downloaders
+Adding Downloaders
 ------------------
 
-TODO: explain how to add new downloaders
+The difference between a downloader and an importer in `papis` is largely
+semantic. Downloaders are mostly meant to scrape websites or download files
+from a remote location. They can be implemented in a very similar way:
+
+- Create a class that inherits from `papis.downloaders.Downloader`.
+- Implement the `Downloader.match` method, which generally checks if a given
+  URI matches a website URL.
+- (Optional) Implement the `Downloader.get_data` method, which returns a dictionary.
+- (Optional) Implement the `Downloader.get_bibtex_url` method to return an URL
+  from which a BibTeX file can be downloaded. This is then parsed and merged
+  automatically.
+- (Optional) Implement the `Downloader.get_document_url` method to return an
+  URL from which a document (e.g. PDF file) can be downloaded.
+
+The downloader can then be added to the `"papis.downloader"` key in `setup.py`,
+similarly to an importer.

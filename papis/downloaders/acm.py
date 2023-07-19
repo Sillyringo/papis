@@ -6,11 +6,12 @@ import papis.downloaders.base
 
 class Downloader(papis.downloaders.Downloader):
 
-    def __init__(self, url: str):
-        papis.downloaders.Downloader.__init__(
-            self, url, name="acm")
-        self.expected_document_extension = 'pdf'
-        self.cookies = {'gdpr': 'true'}
+    def __init__(self, url: str) -> None:
+        super().__init__(
+            url, "acm",
+            expected_document_extension="pdf",
+            cookies={"gdpr": "true"},
+            )
 
     @classmethod
     def match(cls, url: str) -> Optional[papis.downloaders.Downloader]:
@@ -21,8 +22,8 @@ class Downloader(papis.downloaders.Downloader):
 
     def get_doi(self) -> Optional[str]:
         url = self.uri
-        self.logger.debug("Parsing DOI from '%s'", url)
-        mdoi = re.match(r'.*/doi/(.*/[^?&%^$]*).*', url)
+        self.logger.debug("Parsing DOI from '%s'.", url)
+        mdoi = re.match(r".*/doi/(.*/[^?&%^$]*).*", url)
         if mdoi:
             doi = mdoi.group(1).replace("abs/", "").replace("full/", "")
             return doi
@@ -32,5 +33,5 @@ class Downloader(papis.downloaders.Downloader):
     def get_document_url(self) -> Optional[str]:
         durl = ("https://dl.acm.org/doi/pdf/{doi}"
                 .format(doi=self.get_doi()))
-        self.logger.debug("doc url = '%s'", durl)
+        self.logger.debug("Using document URL: '%s'.", durl)
         return durl

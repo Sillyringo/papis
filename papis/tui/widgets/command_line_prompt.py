@@ -1,4 +1,4 @@
-from typing import Any, List, Callable
+from typing import Any, List, Callable, Optional
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.layout.processors import BeforeInput
@@ -16,16 +16,29 @@ from prompt_toolkit.filters import has_focus
 
 class Command:
     """
-    :param name: Name of the command
-    :type  name: parameter_type
-    :param run: A callable object where the first argument is the cmd itself.
-    :type  run: callable
+    .. attribute:: name
+
+        Name of the command
+
+    .. attribute:: run
+
+        A callable object where the first argument is the cmd itself.
+
+    .. attribute:: aliases
+
+        A list of aliases for the command.
+
+    .. attribute:: app
+    .. attribute:: names
     """
     def __init__(
             self,
             name: str,
-            run: Callable[['Command'], Any],
-            aliases: List[str] = []):
+            run: Callable[["Command"], Any],
+            aliases: Optional[List[str]] = None) -> None:
+        if aliases is None:
+            aliases = []
+
         self.name = name
         self.run = run
         self.aliases = aliases
@@ -44,21 +57,24 @@ class CommandLinePrompt(ConditionalContainer):  # type: ignore
     A vim-like command line prompt widget.
     It's supposed to be instantiated only once.
     """
-    def __init__(self, commands: List[Command] = []):
+    def __init__(self, commands: Optional[List[Command]] = None) -> None:
+        if commands is None:
+            commands = []
+
         self.commands = commands
         wc = WordCompleter(sum([c.names for c in commands], []))
         self.buf = Buffer(
             completer=wc, complete_while_typing=True
         )
-        self.buf.text = ''
+        self.buf.text = ""
         self.window = Window(
             content=BufferControl(
                 buffer=self.buf,
-                input_processors=[BeforeInput(':')]
+                input_processors=[BeforeInput(":")]
             ),
             height=1
         )
-        super(CommandLinePrompt, self).__init__(
+        super().__init__(
             content=self.window,
             filter=has_focus(self.window)
         )
@@ -72,15 +88,17 @@ class CommandLinePrompt(ConditionalContainer):  # type: ignore
         cmds = list(filter(lambda c: name in c.names, self.commands))
 
         if len(cmds) > 1:
-            raise Exception('More than one command matches the input')
-        elif len(cmds) == 0:
-            raise Exception('No command found ({0})'.format(name))
+            raise ValueError(
+                "More than one command matches the input: ['{}']"
+                .format("', '".join(cmd.name for cmd in cmds)))
+        elif not cmds:
+            raise ValueError("No command found for '{}'".format(name))
 
         input_cmd.pop(0)
         cmds[0].run(cmds[0], *input_cmd)
 
     def clear(self) -> None:
-        self.text = ''
+        self.text = ""
 
     @property
     def text(self) -> Any:

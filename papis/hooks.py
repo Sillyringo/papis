@@ -1,19 +1,18 @@
 from typing import List, Dict, Any, Callable, TYPE_CHECKING
 
-import logging
-
 import papis.plugin
+import papis.logging
 
 if TYPE_CHECKING:
     from stevedore import ExtensionManager
 
+logger = papis.logging.get_logger(__name__)
 
-logger = logging.getLogger('hooks')
-NON_STEVEDORE_HOOKS = {}  # type: Dict[str, List[Callable[[Any], None]]]
+NON_STEVEDORE_HOOKS: Dict[str, List[Callable[[Any], None]]] = {}
 
 
 def _get_namespace(name: str) -> str:
-    return ("papis.hook.{}".format(name))
+    return "papis.hook.{}".format(name)
 
 
 def get(name: str) -> "ExtensionManager":
@@ -22,7 +21,7 @@ def get(name: str) -> "ExtensionManager":
 
 def run(name: str, *args: Any, **kwargs: Any) -> None:
     full_name = _get_namespace(name)
-    logger.debug("Running hooks for %s", full_name)
+    logger.debug("Running hooks for '%s'.", full_name)
     for callback in papis.plugin.get_available_plugins(full_name):
         callback(*args, **kwargs)
     hooks = NON_STEVEDORE_HOOKS.get(full_name)
@@ -33,6 +32,6 @@ def run(name: str, *args: Any, **kwargs: Any) -> None:
 
 def add(name: str, fun: Callable[[Any], None]) -> None:
     full_name = _get_namespace(name)
-    logger.debug("Adding hook for %s", full_name)
+    logger.debug("Adding hook for '%s'.", full_name)
     hooks = NON_STEVEDORE_HOOKS.setdefault(full_name, [])
     hooks.append(fun)

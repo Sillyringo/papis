@@ -1,13 +1,15 @@
 """
+The papis command-line (without any subcommands) can be used to set configuration
+options or select the library.
 
 Examples
 ^^^^^^^^
 
-- To override some configuration options, you can use the flag ``--set``, for
-  instance, if you want to override the editor used and the opentool to open
-  documents, you can just type
+- To override some configuration options, you can use the ``--set`` flag. For
+  instance, if you want to override the ``editor`` used to edit files or the
+  ``opentool`` used to open documents, you can just type
 
-    .. code:: shell
+    .. code:: sh
 
         papis --set editor gedit --set opentool firefox edit
         papis --set editor gedit --set opentool firefox open
@@ -15,20 +17,18 @@ Examples
 - If you want to list the libraries and pick one before sending a database
   query to papis, use ``--pick-lib`` as such
 
-    .. code:: shell
+    .. code:: sh
 
         papis --pick-lib open 'einstein relativity'
 
-Cli
-^^^
+Command-line Interface
+^^^^^^^^^^^^^^^^^^^^^^
+
 .. click:: papis.commands.default:run
     :prog: papis
-    :commands: []
-
 """
+
 import os
-import sys
-import logging
 from typing import Optional, Tuple, List, Callable, TYPE_CHECKING
 
 import click
@@ -36,29 +36,22 @@ import click.core
 
 import papis
 import papis.api
+import papis.cli
 import papis.config
+import papis.logging
 import papis.commands
 import papis.database
-import papis.cli
 
 if TYPE_CHECKING:
     import cProfile
 
-
-class ColoramaFormatter(logging.Formatter):
-    def format(self, record: logging.LogRecord) -> str:
-        if isinstance(record.msg, str):
-            import colorama
-            record.msg = record.msg.format(c=colorama)
-
-        return super().format(record)
+logger = papis.logging.get_logger(__name__)
 
 
 class MultiCommand(click.core.MultiCommand):
 
-    scripts = papis.commands.get_scripts()
-    scripts.update(papis.commands.get_external_scripts())
-    logger = logging.getLogger('multicommand')
+    scripts = papis.commands.get_all_scripts()
+    script_names = sorted(scripts)
 
     def list_commands(self, ctx: click.core.Context) -> List[str]:
         """List all matched commands in the command folder and in path
@@ -68,9 +61,7 @@ class MultiCommand(click.core.MultiCommand):
         >>> len(rv) > 0
         True
         """
-        _rv = list(self.scripts.keys())
-        _rv.sort()
-        return _rv
+        return self.script_names
 
     def get_command(
             self,
@@ -83,6 +74,7 @@ class MultiCommand(click.core.MultiCommand):
         >>> cmd.name, cmd.help
         ('add', 'Add...')
         >>> mc.get_command(None, 'this command does not exist')
+        Command ... is unknown!
         """
         try:
             script = self.scripts[name]
@@ -91,17 +83,15 @@ class MultiCommand(click.core.MultiCommand):
             matches = list(map(
                 str, difflib.get_close_matches(name, self.scripts, n=2)))
 
-            import colorama
-            self.logger.error(
-                "{c.Fore.RED}{c.Style.BRIGHT}{c.Back.BLACK}"
-                "Command '{name}' is unknown! Did you mean '{matches}'?"
-                "{c.Style.RESET_ALL}"
-                .format(c=colorama, name=name, matches="' or '".join(matches))
-                )
+            if matches:
+                click.echo("Command '{name}' is unknown! Did you mean '{matches}'?"
+                           .format(name=name, matches="' or '".join(matches)))
+            else:
+                click.echo("Command '{name}' is unknown!".format(name=name))
 
             # return the match if there was only one match
             if len(matches) == 1:
-                self.logger.warning("I suppose you meant: '%s'", matches[0])
+                click.echo("I suppose you meant: '{}'".format(matches[0]))
                 script = self.scripts[matches[0]]
             else:
                 return None
@@ -112,14 +102,15 @@ class MultiCommand(click.core.MultiCommand):
         # If it gets here, it means that it is an external script
         import copy
         from papis.commands.external import external_cli
-        cli = copy.copy(external_cli)
+        cli: click.Command = copy.copy(external_cli)
 
         from papis.commands.external import get_command_help
-        cli.context_settings['obj'] = script
+        cli.context_settings["obj"] = script
         if script.path is not None:
             cli.help = get_command_help(script.path)
         cli.name = script.command_name
         cli.short_help = cli.help
+
         return cli
 
 
@@ -127,26 +118,21 @@ def generate_profile_writing_function(profiler: "cProfile.Profile",
                                       filename: str) -> Callable[[], None]:
     def _on_finish() -> None:
         profiler.disable()
-        profiler.create_stats()
-        with open(filename, 'w') as output:
-            import pstats
-            stats = pstats.Stats(profiler, stream=output)
-            stats.sort_stats('time')
-            stats.print_stats()
+        profiler.dump_stats(filename)
 
     return _on_finish
 
 
-@click.group(
+@click.group(                           # type: ignore[arg-type,type-var]
     cls=MultiCommand,
     invoke_without_command=True)
-@click.help_option('--help', '-h')
+@click.help_option("--help", "-h")
 @click.version_option(version=papis.__version__)
 @click.option(
     "-v",
     "--verbose",
     help="Make the output verbose (equivalent to --log DEBUG)",
-    default=False,
+    default="PAPIS_DEBUG" in os.environ,
     is_flag=True)
 @click.option(
     "--profile",
@@ -163,7 +149,7 @@ def generate_profile_writing_function(profiler: "cProfile.Profile",
     "--config",
     help="Configuration file to use",
     type=click.Path(exists=True),
-    default=None,)
+    default=None)
 @click.option(
     "--pick-lib",
     help="Pick library to use",
@@ -179,22 +165,22 @@ def generate_profile_writing_function(profiler: "cProfile.Profile",
     type=(str, str),
     multiple=True,
     help="Set key value, e.g., "
-         "--set info-name information.yaml  --set opentool evince",)
+         "--set info-name information.yaml --set opentool evince")
 @click.option(
     "--color",
     type=click.Choice(["always", "auto", "no"]),
-    default="auto",
+    default=os.environ.get("PAPIS_LOG_COLOR", "auto"),
     help="Prevent the output from having color")
 @click.option(
     "--log",
     help="Logging level",
     type=click.Choice(["INFO", "DEBUG", "WARNING", "ERROR", "CRITICAL"]),
-    default="INFO")
+    default=os.environ.get("PAPIS_LOG_LEVEL", "INFO"))
 @click.option(
     "--logfile",
     help="File to dump the log",
     type=str,
-    default=None)
+    default=os.environ.get("PAPIS_LOG_FILE"))
 @click.option(
     "--np",
     help="Use number of processors for multicore functionalities in papis",
@@ -223,66 +209,49 @@ def run(verbose: bool,
         import atexit
         atexit.register(generate_profile_writing_function(profiler, profile))
 
-    import colorama
-    if color == "no" or (color == "auto" and not sys.stdout.isatty()):
-        # Turn off colorama (strip escape sequences from the output)
-        colorama.init(strip=True)
-    else:
-        colorama.init()
+    papis.logging.setup(log, color=color, logfile=logfile, verbose=verbose)
 
-    log_format = (colorama.Fore.YELLOW
-                  + "%(levelname)s"
-                  + ":"
-                  + colorama.Fore.GREEN
-                  + "%(name)s"
-                  + colorama.Style.RESET_ALL
-                  + ":"
-                  + "%(message)s"
-                  )
-    if verbose:
-        log = "DEBUG"
-        log_format = "%(relativeCreated)d-{}".format(log_format)
+    # NOTE: order of the configurations is intentional based on priority
+    #
+    #   4. default hardcoded settings in `papis/config.py`
+    #   3. global papis configuration file, e.g. `~/.config/papis/config`
+    #   2. library local configuration file, e.g. `LIBDIR/.config`
+    #   1. command-line arguments, e.g. `--set opentool firefox`
 
-    if logfile is None:
-        handler = logging.StreamHandler()
-        handler.setFormatter(ColoramaFormatter(log_format))
-    else:
-        handler = logging.FileHandler(logfile, mode="a")
-
-    logging.basicConfig(level=getattr(logging, log), handlers=[handler])
-    logger = logging.getLogger('default')
-
+    # read in configuration file
     if config:
         papis.config.set_config_file(config)
         papis.config.reset_configuration()
 
-    for pair in set_list:
-        logger.debug("Setting '%s' to '%s'", *pair)
-        papis.config.set(pair[0], pair[1])
-
+    # read in configuration from current library
     if pick_lib:
-        _picked_libs = papis.pick.pick(papis.api.get_libraries())
-        if _picked_libs:
-            lib = _picked_libs[0]
+        picked_libs = papis.pick.pick(papis.api.get_libraries())
+        if picked_libs:
+            lib = picked_libs[0]
 
     papis.config.set_lib_from_name(lib)
     library = papis.config.get_lib()
 
     if not library.paths:
-        raise Exception("Library '{0}' does not have any existing folders"
-                        " attached to it, please define and create the paths"
-                        .format(lib))
+        raise RuntimeError(
+            "Library '{}' does not have any existing folders attached to it. "
+            "Please define and create the paths in the configuration file"
+            .format(lib))
 
+    # Now the library should be set, let us check if there is a
+    # local configuration file there, and if there is one, then
+    # merge its contents
+    local_config_file = papis.config.getstring("local-config-file")
     for path in library.paths:
-        # Now the library should be set, let us check if there is a
-        # local configuration file there, and if there is one, then
-        # merge its contents
-        local_config_file = os.path.expanduser(
-            os.path.join(path,
-                         papis.config.getstring("local-config-file")))
+        local_config_path = os.path.expanduser(os.path.join(path, local_config_file))
         papis.config.merge_configuration_from_path(
-            local_config_file,
+            local_config_path,
             papis.config.get_configuration())
+
+    # read in configuration from command-line
+    for pair in set_list:
+        logger.debug("Setting '%s' to '%s'.", *pair)
+        papis.config.set(pair[0], pair[1])
 
     if clear_cache:
         papis.database.get().clear()

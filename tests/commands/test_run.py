@@ -1,23 +1,14 @@
-import unittest
-import tests
-from papis.commands.run import run
+import pytest
 import papis.config
 
+from tests.testlib import TemporaryLibrary
 
-class Test(unittest.TestCase):
 
-    @classmethod
-    def setUpClass(self):
-        tests.setup_test_library()
+def test_run_run(tmp_library: TemporaryLibrary) -> None:
+    from papis.commands.run import run
 
-    @classmethod
-    def tearDownClass(self):
-        pass
+    libdir, = papis.config.get_lib_dirs()
+    run(libdir, command=["ls"])
 
-    def test_run_ls(self):
-        status = run(papis.config.get_lib_dirs()[0], command=['ls'])
-        assert(status == 0)
-
-    def test_run_nonexistent(self):
-        status = run(papis.config.get_lib_dirs()[0], command=['nonexistent'])
-        assert(not status == 0)
+    with pytest.raises(FileNotFoundError):
+        run(libdir, command=["nonexistent"])

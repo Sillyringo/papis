@@ -1,3 +1,5 @@
+.. _general-settings:
+
 General settings
 ----------------
 
@@ -123,7 +125,7 @@ Tools options
     As for now papis is not intended to detect the type of document to be opened
     and decide upon how to open the document. You should set this
     to the right program for the tool. If you are on linux you might want
-    to take a look at `ranger <http://ranger.github.io>`_ or let
+    to take a look at `ranger <https://ranger.github.io>`__ or let
     the default handle it in your system.
     For mac users you might set this to ``open``.
 
@@ -180,6 +182,15 @@ Bibtex options
     [mylib]
     extra-bibtex-keys = ["tags", "doc_url"]
 
+.. papis-config:: bibtex-ignore-keys
+   :default: []
+
+  When exporting a document to the BibTeX format, do not export the keys
+  appearing in this list. This might be useful if you have some keys
+  that have a lot of content, such as ``abstract``, or maybe you
+  have used a valid BibTeX key for some other purposes, like the ``note``
+  key.
+
 .. papis-config:: extra-bibtex-types
   :default: []
 
@@ -190,16 +201,14 @@ Bibtex options
     [mylib]
     extra-bibtex-types = ["wikipedia", "video", "song"]
 
-  See
-  `bibtex
-  reference <http://mirror.easyname.at/ctan/biblio/bibtex/base/btxdoc.pdf>`_.
+  See `bibtex reference <https://mirror.easyname.at/ctan/biblio/bibtex/base/btxdoc.pdf>`__.
 
 .. papis-config:: multiple-authors-format
 
     When retrieving automatic author information from services like
-    crossref.org, papis usually builds the ``author`` field for the
-    given document. The format how every single author name is built
-    is given by this setting, for instance you could customize it
+    `crossref.org <https://www.crossref.org>`__, papis usually builds the
+    ``author`` field for the given document. The format how every single author
+    name is built is given by this setting, for instance you could customize it
     by the following:
 
     ::
@@ -220,6 +229,11 @@ Bibtex options
 
     Whether or not to allow direct unicode characters in the document
     fields to be exported into the bibtex text.
+
+.. papis-config:: bibtex-export-zotero-file
+
+   A boolean value that can be used to add a ``"file"`` field to exported
+   BibTeX entries. The files are added as a semicolon separated string.
 
 .. _add-command-options:
 
@@ -278,14 +292,14 @@ Bibtex options
     the folder of your documents to be named after the format
     ``author-title`` then you should set it to
     the papis format: ``{doc[author]}-{doc[title]}``. You can create formatted
-    subfolders by using path separators (i.e., ``/``) in this format string, e.g., 
+    subfolders by using path separators (i.e., ``/``) in this format string, e.g.,
     ``{doc[year]} / {doc[title]}``.
     Per default a hash followed by the author name is created.
 
 .. papis-config:: add-file-name
 
     Same as ``add-folder-name``, but for files, not folders. If it is not set,
-    the names of the files will be cleaned and taken `as-is`.
+    the names of the files will be cleaned and taken ``as-is``.
 
 .. papis-config:: add-interactive
 
@@ -323,7 +337,7 @@ Bibtex options
 
     This command provides the key that is used to generate the
     url. For users that run ``papis add --from-doi``, setting browse-key
-    to ``doi`` constructs the url from dx.doi.org/DOI, providing a
+    to ``doi`` constructs the url from ``dx.doi.org/<DOI>``, providing a
     much more accurate url.
 
     Default value is set to ``url``. If you need functionality
@@ -358,6 +372,53 @@ Bibtex options
     will be generated.
 
 .. _marks-options:
+
+``papis doctor`` options
+------------------------
+
+.. papis-config:: doctor-default-checks
+
+    A list of checks that are performed by default.
+
+.. papis-config:: doctor-keys-exist-keys
+
+    A list of keys used by the ``keys-exist`` check. The check will show an
+    error if these keys are not present in a document.
+
+.. papis-config:: doctor-duplicated-keys-keys
+
+    A list of keys used by the ``duplicated-keys`` check. The check will show
+    an error if the value of these keys is duplicated across multiple documents.
+
+.. papis-config:: doctor-html-codes-keys
+
+    A list of keys used by the ``html-codes`` check. The check will show an error
+    if any of the keys contain unwanted HTML codes, e.g. ``&amp;``.
+
+.. papis-config:: doctor-html-tags-keys
+
+    A list of keys used by the ``html-tags`` check. The check will show an error
+    if any of the keys contain unwanted HTML tags, e.g. ``<div>``.
+
+.. papis-config:: doctor-key-type-check-keys
+
+   A list of two tuples with ``(key, type)`` used by the ``key-type`` check. This
+   check will show an error if the key does not have the corresponding type. The
+   type should be a builtin Python type that can be used with ``eval``.
+
+Citations options
+-----------------
+
+You can change the name of the citation files, however we discourage this.
+
+.. papis-config:: citations-file-name
+
+    The name of the file to store the citations of the documents.
+
+.. papis-config:: cited-by-file-name
+
+    The name of the file to store the citations to the document.
+
 
 Marks
 -----
@@ -436,7 +497,13 @@ Downloaders
 
     There is the possibility of download papers using a proxy.
     To know more you can checkout this
-    `link <http://docs.python-requests.org/en/master/user/advanced/#proxies>`_.
+    `link <https://docs.python-requests.org/en/latest/user/advanced/#proxies>`__.
+
+.. papis-config:: isbn-service
+
+    Sets the ISBN service used by the ISBN importer. Available plugins are
+    documented
+    `here <https://isbnlib.readthedocs.io/en/latest/devs.html#plugins>`__.
 
 Databases
 ---------
@@ -467,7 +534,7 @@ Databases
 
     The backend to use in the database. As for now papis supports
     the own database system ``papis`` and
-    `whoosh <https://whoosh.readthedocs.io/en/latest/>`_.
+    `whoosh <https://whoosh.readthedocs.io/en/latest/>`__.
 
 .. papis-config:: use-cache
 
@@ -492,7 +559,7 @@ Databases
 .. papis-config:: whoosh-schema-prototype
 
     This is the model for the whoosh schema, check
-    `the documentation <https://whoosh.readthedocs.io/en/latest/schema.html/>`_
+    `the documentation <https://whoosh.readthedocs.io/en/latest/schema.html>`__
     for more information.
 
 Terminal user interface (picker)
@@ -534,7 +601,7 @@ or inside the library sections prepending a ``tui-``,
     Examples are ``fg:#ff00aa bg:black`` etc...
     More information can be found
     `here
-    <https://python-prompt-toolkit.readthedocs.io/en/master/pages/advanced_topics/styling.html/>`_
+    <https://python-prompt-toolkit.readthedocs.io/en/master/pages/advanced_topics/styling.html>`__
     .
 
 .. papis-config:: message_toolbar_style
@@ -611,12 +678,11 @@ or inside the library sections prepending a ``tui-``,
 FZF integration
 ---------------
 
-From version `0.12 <https://github.com/papis/papis/issues/334>`_
+From version `0.12 <https://github.com/papis/papis/issues/334>`__
 papis ships with an *out-of-the-box*
-`fzf <https://github.com/junegunn/fzf>`_ integration for the picker.  A
+`fzf <https://github.com/junegunn/fzf>`__ integration for the picker.  A
 minimal terminal user interface is provided and together with options
-for its customization.
-You can set the picktool to ``fzf`` by setting
+for its customization. You can set the picktool to ``fzf`` by setting
 
 .. code:: ini
 
@@ -658,7 +724,7 @@ of fzf.
     ``c`` which contains the package ``colorama`` in it.
     Refer to the ``colorama`` documentation to see which colors
     are available
-    `here <https://github.com/tartley/colorama/blob/master/colorama/ansi.py#L49>`_.
+    `here <https://github.com/tartley/colorama/blob/master/colorama/ansi.py#L49>`__.
     For instance, if you want the title in red you would put in your
     ``fzf-header-format``
 
@@ -742,16 +808,27 @@ Other
   if you want your documents by default to be sorted by ``year``, you
   would set ``sort-field = year``.
 
+.. papis-config:: sort-reverse
+
+    Augments ``sort-field`` by allowing the documents to be sorted in
+    reverse order. For example, when sorting by year, this allows sorting
+    ascendingly or descendingly. This is a boolean option that can be set to
+    ``True`` or ``False``.
+
 .. papis-config:: time-stamp
 
   Whether or not to add a timestamp to a document when is being added to
   papis. If documents have a timestamp, then they will be sortable
-  using `--sort time_added` option.
+  using ``--sort time_added`` option.
 
 .. papis-config:: formater
 
-    The formatting language in python can be configured through plugins.
+    Picks the formater for templated strings in the configuration file and
+    in various strings presented to the user. Supported formaters are
 
-    .. autoclass:: papis.format.PythonFormater
+    * ``"python"``: based on :class:`papis.format.PythonFormater`.
+    * ``"jinja2"``: based on :class:`papis.format.Jinja2Formater`.
 
-    .. autoclass:: papis.format.Jinja2Formater
+    Note that the default values of many of the papis configuration settings are
+    based on the Python formatter. These will need to all be specified explicitly
+    if another formater is chosen.

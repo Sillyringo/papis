@@ -1,86 +1,89 @@
-import papis.bibtex
-import unittest
-import tests
-import papis.config
-from papis.commands.edit import run, cli
 import os
+import pytest
+
+import papis.database
+
+from tests.testlib import TemporaryLibrary, PapisRunner
 
 
-class TestRun(unittest.TestCase):
+@pytest.mark.library_setup(settings={
+    "editor": "python {}".format(__file__),
+    })
+def test_edit_run(tmp_library: TemporaryLibrary) -> None:
+    import papis.config
+    from papis.commands.edit import run
 
-    @classmethod
-    def setUpClass(self):
-        tests.setup_test_library()
+    print(papis.config.get("editor"))
+    print(__file__)
 
-    def get_docs(self):
-        db = papis.database.get()
-        return db.get_all_documents()
+    db = papis.database.get()
+    docs = db.get_all_documents()
+    run(docs[0])
 
-    def test_run_function_exists(self):
-        self.assertTrue(run is not None)
+    db.clear()
+    db.initialize()
 
-
-    def test_update(self):
-        docs = self.get_docs()
-        doc = docs[0]
-        title = doc['title'] + 'test_update'
-        self.assertTrue(title is not None)
-
-        # mocking
-        doc['title'] = title
-        doc.save()
-
-        papis.config.set('editor', 'ls')
-        run(doc)
-        db = papis.database.get()
-        docs = db.query_dict(dict(title=title))
-        self.assertTrue(len(docs) == 1)
-        self.assertTrue(docs[0]['title'] == title)
+    doc, = db.query_dict({"title": "test_edit"})
+    assert "test_edit" in doc["title"]
 
 
-class TestCli(tests.cli.TestCli):
+@pytest.mark.library_setup(settings={
+    "editor": "echo",
+    })
+def test_edit_cli(tmp_library: TemporaryLibrary) -> None:
+    from papis.commands.edit import cli
+    cli_runner = PapisRunner()
 
-    cli = cli
+    # check run
+    result = cli_runner.invoke(
+        cli,
+        ["krishnamurti"])
+    assert result.exit_code == 0
 
-    def test_main(self):
-        self.do_test_cli_function_exists()
-        self.do_test_help()
+    # check run with non-existent document
+    result = cli_runner.invoke(
+        cli,
+        ["this document does not exist"])
+    assert result.exit_code == 0
 
-    def test_simple(self):
-        result = self.invoke([
-            'krishnamurti'
-        ])
-        self.assertTrue(result.exit_code == 0)
+    # check --all
+    result = cli_runner.invoke(
+        cli,
+        ["--all", "--editor", "ls", "krishnamurti"])
+    assert result.exit_code == 0
+    assert papis.config.get("editor") == "ls"
 
-    def test_doc_not_found(self):
-        result = self.invoke([
-            'this document it"s not going to be found'
-        ])
-        self.assertTrue(result.exit_code == 0)
+    # check --notes
+    notes_name = papis.config.get("notes-name")
+    assert notes_name
 
-    def test_all(self):
-        result = self.invoke([
-            'krishnamurti', '--all', '-e', 'ls'
-        ])
-        self.assertTrue(result.exit_code == 0)
-        self.assertTrue(papis.config.get('editor') == 'ls')
+    result = cli_runner.invoke(
+        cli,
+        ["--all", "--editor", "echo", "--notes", "krishnamurti"])
+    assert result.exit_code == 0
+    assert papis.config.get("editor") == "echo"
 
-    def test_config(self):
-        self.assertTrue(papis.config.get('notes-name'))
+    db = papis.database.get()
+    doc, = db.query_dict({"author": "Krishnamurti"})
+    folder = doc.get_main_folder()
+    assert folder is not None
 
-    def test_notes(self):
-        result = self.invoke([
-            'krishnamurti', '--all', '-e', 'echo', '-n'
-        ])
-        self.assertTrue(result.exit_code == 0)
-        self.assertTrue(papis.config.get('editor') == 'echo')
+    expected_notes_path = os.path.join(folder, notes_name)
+    assert os.path.exists(expected_notes_path)
 
-        db = papis.database.get()
-        docs = db.query_dict(dict(author="Krishnamurti"))
-        self.assertTrue(len(docs) == 1)
-        doc = docs[0]
-        notespath = os.path.join(
-            doc.get_main_folder(),
-            papis.config.get('notes-name')
-        )
-        self.assertTrue(os.path.exists(notespath))
+
+def sed_replace(filename: str) -> None:
+    # NOTE: this function is used by 'test_edit_run' to provide a cross-platform
+    # way to edit a file that the test can later recognize and see it was called
+    with open(filename) as fd:
+        contents = "\n".join([
+            line.replace("title: ", "title: test_edit") for line in fd
+            ])
+
+    with open(filename, "w") as fd:
+        fd.write(contents)
+
+
+if __name__ == "__main__":
+    import sys
+    sed_replace(sys.argv[-1])

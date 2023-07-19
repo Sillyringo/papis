@@ -31,7 +31,7 @@ class MessageToolbar(ConditionalContainer):  # type: ignore
     def __init__(self, style: str = "") -> None:
         self.message = None
         self.text_control = FormattedTextControl(text="")
-        super(MessageToolbar, self).__init__(
+        super().__init__(
             content=Window(
                 style=style,
                 content=self.text_control,
@@ -52,9 +52,9 @@ class MessageToolbar(ConditionalContainer):  # type: ignore
 class InfoWindow(ConditionalContainer):  # type: ignore
     # TODO: add stubs to be able to remove type ignore above
 
-    def __init__(self, lexer_name: str = 'yaml') -> None:
+    def __init__(self, lexer_name: str = "yaml") -> None:
         self.buf = Buffer()
-        self.buf.text = ''
+        self.buf.text = ""
         self.lexer = PygmentsLexer(find_lexer_class_by_name(lexer_name))
         self.window = HSplit([
             HorizontalLine(),
@@ -62,7 +62,7 @@ class InfoWindow(ConditionalContainer):  # type: ignore
                 content=BufferControl(buffer=self.buf, lexer=self.lexer)
             )
         ], height=Dimension(min=5, max=20, weight=1))
-        super(InfoWindow, self).__init__(
+        super().__init__(
             content=self.window,
             filter=has_focus(self)
         )
@@ -81,14 +81,14 @@ class HelpWindow(ConditionalContainer):  # type: ignore
 
     def __init__(self) -> None:
         self.text_control = FormattedTextControl(
-            text=HTML('')
+            text=HTML("")
         )
         self.window = Window(
             content=self.text_control,
             always_hide_cursor=True,
             align=WindowAlign.LEFT
         )
-        super(HelpWindow, self).__init__(
+        super().__init__(
             content=self.window,
             filter=has_focus(self.window)
         )

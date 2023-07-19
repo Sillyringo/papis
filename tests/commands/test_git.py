@@ -1,21 +1,18 @@
-import papis.bibtex
-import unittest
-import tests
-import papis.config
-from papis.commands.git import cli
 import os
 
+import papis.config
 
-class TestCli(tests.cli.TestCli):
+from tests.testlib import TemporaryLibrary, PapisRunner
 
-    cli = cli
 
-    def test_main(self):
-        self.do_test_cli_function_exists()
-        self.do_test_help()
+def test_git_cli(tmp_library: TemporaryLibrary) -> None:
+    from papis.commands.git import cli
+    cli_runner = PapisRunner()
 
-    def test_simple(self):
-        result = self.invoke([
-            'init'
-        ])
-        self.assertTrue(result.exit_code == 0)
+    result = cli_runner.invoke(
+        cli,
+        ["init"])
+    assert result.exit_code == 0
+
+    folder, = papis.config.get_lib_dirs()
+    assert os.path.exists(os.path.join(folder, ".git"))

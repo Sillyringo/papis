@@ -1,7 +1,7 @@
 Custom scripts
 ==============
 
-As in `git <http://git-scm.com>`__, you can write custom scripts to
+As in `git <https://git-scm.com>`__, you can write custom scripts to
 include them in the command spectrum of papis.
 
 Example: Mail script
@@ -123,8 +123,9 @@ This is an example of using papis with the window manager `i3`.
 Useful links
 ------------
 
-- `Get paper references with papis <https://alejandrogallo.github.io/blog/get-paper-references.html`_
-  .. code:: sh
+- `Get paper references with papis <https://alejandrogallo.github.io/blog/posts/getting-paper-references-with-papis/>`__
+
+    .. code:: sh
 
         citget() {
             query=$1
@@ -135,5 +136,5 @@ Useful links
                 cmd "papis add --from doi {doc[doi]} $@"
         }
 
-            
+
 

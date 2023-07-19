@@ -1,99 +1,187 @@
-"""Module defining the main document type.
-"""
+"""Module defining the main document type."""
+
 import os
 import re
-import logging
+import enum
 from typing import (
-    List, Dict, Any, Optional, Union, NamedTuple, Callable, Tuple)
+    Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple,
+    TypedDict, Union,
+    )
 
-try:
-    from typing import TypedDict  # Python 3.8+
-except ImportError:
-    from typing_extensions import TypedDict
-
-import papis.config
 import papis
+import papis.config
+import papis.logging
 
-logger = logging.getLogger("document")  # type: logging.Logger
+logger = papis.logging.get_logger(__name__)
 
-KeyConversion = TypedDict(
-    "KeyConversion", {"key": Optional[str],
-                      "action": Optional[Callable[[Any], Any]]}
-)
-EmptyKeyConversion = {"key": None, "action": None}  # type: KeyConversion
-KeyConversionPair = NamedTuple(
-    "KeyConversionPair",
-    [("foreign_key", str), ("list", List[KeyConversion])]
-)
+#: A union of types that can be converted to a document.
+DocumentLike = Union["Document", Dict[str, Any]]
 
 
-def keyconversion_to_data(conversion_list: List[KeyConversionPair],
+# NOTE: rankings used in papis.document.sort:
+#   date:       0 (date type -- comes first)
+#   int:        1 (integer type)
+#   other:      2 (other types)
+#   none:       3 (missing key)
+class _SortPriority(enum.IntEnum):
+    Date = 0
+    Int = 1
+    Other = 2
+    Missing = 3
+
+
+class KeyConversion(TypedDict):
+    """A :class:`dict` that contains a *key* and an *action*."""
+
+    #: Name of a key in a foreign dictionary to convert.
+    key: Optional[str]
+    #: Action to apply to the value at :attr:`key` for pre-processing.
+    action: Optional[Callable[[Any], Any]]
+
+
+#: A default :class:`KeyConversion`.
+EmptyKeyConversion = KeyConversion(key=None, action=None)
+
+
+class KeyConversionPair(NamedTuple):
+    #: A string denoting the foreign key (in the input data).
+    foreign_key: str
+    #: A :class:`list` of :class:`KeyConversion` mappings used to
+    #: rename and post-process the :attr:`foreign_key` and its value.
+    list: List[KeyConversion]
+
+
+def keyconversion_to_data(conversions: Sequence[KeyConversionPair],
                           data: Dict[str, Any],
                           keep_unknown_keys: bool = False) -> Dict[str, Any]:
-    """Function to convert general dictionaries into a papis document.
+    r"""Function to convert between dictionaries.
 
-    This can be used for instance when parsing a website and
-    writing a KeyConversionPair to be input to this function.
+    This can be used to define a fixed set of translation rules between, e.g.,
+    JSON data obtained from a website API and standard ``papis`` key names and
+    formatting. The implementation is completely generic.
+
+    For example, we have the simple dictionary
+
+    .. code:: python
+
+        data = {"id": "10.1103/physrevb.89.140501"}
+
+    which contains the DOI of a document with the wrong key. We can then write
+    the following rules
+
+    .. code:: python
+
+        conversions = [
+            KeyConversionPair("id", [
+                {"key": "doi", "action": None},
+                {"key": "url": "action": lambda x: "https://doi.org/{}".format(x)}
+            ])
+        ]
+
+        new_data = keyconversion_to_data(conversions, data)
+
+    to rename the ``"id"`` key to the standard ``"doi"`` key used by ``papis``
+    and a URL. Any number of such rules can be written, depending on the
+    complexity of the incoming data. Note that any errors raised on the
+    application of the *action* will be silently ignored and the corresponding
+    key will be skipped.
+
+    :param conversions: a sequence of :class:`KeyConversionPair`\ s used to
+        convert the *data*.
+    :param data: a :class:`dict` to be convert according to *conversions*.
+    :param keep_unknown_keys: if *True* unknown keys from *data* are kept in the
+        resulting dictionary. Otherwise, only keys from *conversions* are
+        present.
+
+    :returns: a new :class:`dict` containing the entries from *data* converted
+        according to *conversions*.
     """
 
-    new_data = dict()
+    new_data = {}
 
-    for key_pair in conversion_list:
+    for key_pair in conversions:
 
         foreign_key = key_pair.foreign_key
         if foreign_key not in data:
             continue
 
         for conv_data in key_pair.list:
-            papis_key = conv_data.get('key') or foreign_key  # type: str
+            papis_key: str = conv_data.get("key") or foreign_key
             papis_value = data[foreign_key]
 
-            try:
-                action = conv_data.get('action') or (lambda x: x)
-                new_data[papis_key] = action(papis_value)
-            except Exception as ex:
-                logger.debug("Error while trying to parse '%s' (%s)",
-                             papis_key, ex)
+            action = conv_data.get("action")
+            if action:
+                try:
+                    new_value = action(papis_value)
+                except Exception as exc:
+                    logger.debug("Error while trying to parse '%s' (%s).",
+                                 papis_key, exc_info=exc)
+                    new_value = None
+            else:
+                new_value = papis_value
+
+            if isinstance(new_value, str):
+                new_value = new_value.strip()
+
+            if new_value:
+                new_data[papis_key] = new_value
 
     if keep_unknown_keys:
         for key, value in data.items():
-            if key in [c.foreign_key for c in conversion_list]:
+            if key in [c.foreign_key for c in conversions]:
                 continue
             new_data[key] = value
 
-    if 'author_list' in new_data:
-        new_data['author'] = author_list_to_author(new_data)
+    if "author_list" in new_data:
+        new_data["author"] = author_list_to_author(new_data)
 
     return new_data
 
 
 def author_list_to_author(data: Dict[str, Any]) -> str:
     """Convert a list of authors into a single author string.
+
+    This uses the :ref:`config-settings-multiple-authors-separator` and the
+    :ref:`config-settings-multiple-authors-format` settings to construct the
+    concatenated authors.
+
+    :param data: a :class:`dict` that contains an ``"author_list"`` key to
+        be converted into a single author string.
+
+    >>> author1 = {"given": "Some", "family": "Author"}
+    >>> author2 = {"given": "Other", "family": "Author"}
+    >>> author_list_to_author({"author_list": [author1, author2]})
+    'Author, Some and Author, Other'
     """
-    author = ''
-    separator = papis.config.get('multiple-authors-separator')
-    separator_fmt = papis.config.get('multiple-authors-format')
-    if separator is None or separator_fmt is None:
-        raise Exception(
-            "You have to define 'multiple-author-separator'"
-            " and 'multiple-author-format'")
-    if 'author_list' in data:
-        author = (
-            separator.join([
-                separator_fmt.format(au=author)
-                for author in data['author_list']
-            ])
-        )
-    return author
+    if "author_list" not in data:
+        return ""
+
+    separator = papis.config.getstring("multiple-authors-separator")
+    fmt = papis.config.getstring("multiple-authors-format")
+
+    if separator is None or fmt is None:
+        raise ValueError(
+            "Cannot join the author list if the settings 'multiple-authors-separator' "
+            "and 'multiple-authors-format' are not present in the configuration")
+
+    return separator.join([
+        fmt.format(au=author) for author in data["author_list"]
+        ])
 
 
-def split_authors_name(
-        authors: List[str], separator: str = "and") -> List[Dict[str, str]]:
-    """
-    Convert a list of authors to papis formatted data.
+def split_authors_name(authors: List[str],
+                       separator: str = "and") -> List[Dict[str, Any]]:
+    """Convert list of authors to a fixed format.
 
-    :arg authors: A list of single author names or multiple authors separated
-        by *separator*.
+    This uses :func:`bibtexparser.customization.splitname` to correctly
+    split and determine the first and last names of an author in the list.
+    Note that this is just a heuristic and can give incorrect results for
+    certain author names.
+
+    :param authors: a list of author names, where each entry can consists of
+        multiple authors separated by *separator*.
+    :param separator: a separator for entries in *authors* that contain
+        multiple authors.
     """
     from bibtexparser.customization import splitname
 
@@ -104,43 +192,51 @@ def split_authors_name(
             given = " ".join(parts["first"])
             family = " ".join(parts["von"] + parts["last"] + parts["jr"])
 
-            author_list.append(dict(family=family, given=given))
+            author_list.append({"family": family, "given": given})
 
     return author_list
 
 
 class DocHtmlEscaped(Dict[str, Any]):
-    """
-    Small helper class to escape html elements.
+    """Small helper class to escape HTML elements in a document.
 
-    >>> DocHtmlEscaped(from_data(dict(title='> >< int & "" "')))['title']
+    >>> DocHtmlEscaped(from_data({"title": '> >< int & "" "'}))['title']
     '&gt; &gt;&lt; int &amp; &quot;&quot; &quot;'
     """
 
-    def __init__(self, doc: Any) -> None:
-        self.__doc = doc
+    def __init__(self, doc: "Document") -> None:
+        self.doc = doc
 
     def __getitem__(self, key: str) -> str:
         return (
-            str(self.__doc[key])
-            .replace('&', '&amp;')
-            .replace('<', '&lt;')
-            .replace('>', '&gt;')
-            .replace('"', '&quot;'))
+            str(self.doc[key])
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;"))
 
 
 class Document(Dict[str, Any]):
+    """An abstract document in a ``papis`` library.
 
-    """Class implementing the entry abstraction of a document in a library.
-    It is basically a python dictionary with more methods.
+    This class inherits from a standard :class:`dict` and implements some
+    additional functionality.
+
+    .. attribute:: html_escape
+
+        A :class:`DocHtmlEscaped` instance that can be used to escape keys
+        in the document for use in HTML documents.
     """
 
-    subfolder = ""  # type: str
-    _info_file_path = ""  # type: str
+    subfolder: str = ""
+    _info_file_path: str = ""
 
-    def __init__(self, folder: Optional[str] = None,
-                 data: Optional[Dict[str, Any]] = None):
-        self._folder = None  # type: Optional[str]
+    def __init__(self,
+                 folder: Optional[str] = None,
+                 data: Optional[Dict[str, Any]] = None) -> None:
+        super().__init__()
+
+        self._folder: Optional[str] = None
 
         if folder is not None:
             self.set_folder(folder)
@@ -148,6 +244,10 @@ class Document(Dict[str, Any]):
 
         if data is not None:
             self.update(data)
+
+    def has(self, key: str) -> bool:
+        """Check if *key* is in the document."""
+        return key in self
 
     def __missing__(self, key: str) -> str:
         """
@@ -159,149 +259,154 @@ class Document(Dict[str, Any]):
     def html_escape(self) -> DocHtmlEscaped:
         return DocHtmlEscaped(self)
 
+    def set_folder(self, folder: str) -> None:
+        """Set the document's main folder.
+
+        This also updates the location of the info file and other attributes.
+        Note, however, that it will not load any data from the given folder
+        even if it contains another info file (see :func:`from_folder` for
+        this functionality).
+
+        :param folder: an absolute path to a new main folder for the document.
+        """
+        self._folder = os.path.expanduser(folder)
+        self._info_file_path = os.path.join(folder, papis.config.getstring("info-name"))
+        self.subfolder = (
+            self._folder
+            .replace(os.path.expanduser("~"), "")
+            .replace("/", " "))
+
     def get_main_folder(self) -> Optional[str]:
-        """Get full path for the folder where the document and the information
-        is stored.
-        :returns: Folder path
+        """
+        :returns: the root path in the filesystem where the document is stored,
+            if any.
         """
         return self._folder
 
-    def set_folder(self, folder: str) -> None:
-        """Set document's folder. The info_file path will be accordingly set.
-
-        :param folder: Folder where the document will be stored, full path.
-        :type  folder: str
-        """
-        self._folder = folder
-        self._info_file_path = os.path.join(
-            folder,
-            papis.config.getstring('info-name'))
-        self.subfolder = (self._folder
-                              .replace(os.path.expanduser("~"), "")
-                              .replace("/", " "))
-
     def get_main_folder_name(self) -> Optional[str]:
-        """Get main folder name where the document and the information is
-        stored.
-        :returns: Folder name
+        """
+        :returns: the folder name of the document, i.e. the basename of
+            the path returned by :meth:`get_main_folder`.
         """
         folder = self.get_main_folder()
         return os.path.basename(folder) if folder else None
 
-    def has(self, key: str) -> bool:
-        """Check if the information file has some key defined.
-
-        :param key: Key name to be checked
-        :returns: True/False
-
-        """
-        return key in self
-
-    def save(self) -> None:
-        """Saves the current document's information into the info file.
-        """
-        # FIXME: fix circular import in papis.yaml
-        import papis.yaml
-        papis.yaml.data_to_yaml(self.get_info_file(),
-                                {key: self[key]
-                                 for key in self.keys() if self[key]})
-
     def get_info_file(self) -> str:
-        """Get full path for the info file
-        :returns: Full path for the info file
-        :rtype: str
+        """
+        :returns: path to the info file, which can also be an empty string if
+            no such file has been created.
         """
         return self._info_file_path
 
     def get_files(self) -> List[str]:
-        """Get the files linked to the document, if any.
+        """Get the files linked to the document.
 
-        :returns: List of full file paths
-        :rtype:  list
+        The files in a document are stored relative to its main folder. If no
+        main folder is set on the document (see :meth:`set_folder`), then this
+        function will not return any files. To retrieve the relative file paths
+        only, access ``doc["files"]`` directly.
+
+        :returns: a :class:`list` of absolute file paths in the document's
+            main folder, if any.
         """
-        if not self.has('files'):
-            return []
-        files = (self["files"]
-                 if isinstance(self["files"], list)
-                 else [self["files"]])
         folder = self.get_main_folder()
-        return [os.path.join(folder, fl) for fl in files] if folder else []
+        if folder is None:
+            return []
+
+        relative_files = self.get("files")
+        if relative_files is None:
+            return []
+
+        files = relative_files if isinstance(relative_files, list) else [relative_files]
+        return [os.path.join(folder, f) for f in files]
+
+    def save(self) -> None:
+        """Saves the current document fields into the info file."""
+        import papis.yaml
+
+        allow_unicode = papis.config.getboolean("info-allow-unicode")
+        papis.yaml.data_to_yaml(self.get_info_file(),
+                                dict(self),
+                                allow_unicode=allow_unicode)
 
     def load(self) -> None:
-        """Load information from info file
-        """
+        """Load information from the info file."""
         import papis.yaml
-        if not os.path.exists(self.get_info_file()):
+        info_file = self.get_info_file()
+        if not info_file or not os.path.exists(info_file):
             return
+
         try:
-            data = papis.yaml.yaml_to_data(self.get_info_file(),
-                                           raise_exception=True)
-        except Exception as ex:
+            data = papis.yaml.yaml_to_data(info_file, raise_exception=True)
+        except Exception as exc:
             logger.error(
-                    "Error reading yaml file in '%s'. Please check it!\n%s",
-                    self.get_info_file(), ex)
+                "Error reading info file at '%s'. Please check it!",
+                self.get_info_file(), exc_info=exc)
         else:
-            for key in data:
-                self[key] = data[key]
+            self.update(data)
+
+
+def from_data(data: Dict[str, Any]) -> Document:
+    """Construct a :class:`Document` from a dictionary.
+
+    :param data: a dictionary to be made into a new document.
+    """
+    return Document(data=data)
 
 
 def from_folder(folder_path: str) -> Document:
-    """Construct a document object from a folder
+    """Construct a :class:`Document` from a folder.
 
-    :param folder_path: Full path to a valid papis folder
-    :type  folder_path: str
-    :returns: A papis document
-    :rtype:  papis.document.Document
+    :param folder_path: absolute path to a valid ``papis`` folder.
     """
     return Document(folder=folder_path)
 
 
 def to_json(document: Document) -> str:
-    """Export information into a json string
-    :param document: Papis document
-    :type  document: Document
-    :returns: Json formatted info file
-    :rtype:  str
+    """Export the document to JSON.
 
+    :returns: a JSON string corresponding to all the entries in the document.
     """
     import json
     return json.dumps(to_dict(document))
 
 
 def to_dict(document: Document) -> Dict[str, Any]:
-    """Gets a python dictionary with the information of the document
-    :param document: Papis document
-    :type  document: Document
-    :returns: Python dictionary
-    :rtype:  dict
+    """Convert a document back into a standard :class:`dict`.
+
+    :returns: a :class:`dict` corresponding to all the entries in the document.
     """
-    result = dict()
-    for key in document.keys():
-        result[key] = document[key]
-    return result
+    return {key: document[key] for key in document}
 
 
 def dump(document: Document) -> str:
-    """Return information string without any obvious format
-    :param document: Papis document
-    :type  document: Document
-    :returns: String with document's information
-    :rtype:  str
+    """Dump the document into a formatted string.
+
+    The format of the string is not fixed and is meant to be used to display the
+    document entries in a consistent way across ``papis``.
+
+    :returns: a string containing all the entries in the document.
 
     >>> doc = from_data({'title': 'Hello World'})
     >>> dump(doc)
-    'title:   Hello World\\n'
+    'title:     Hello World'
     """
-    string = ""
-    for i in document.keys():
-        string += str(i)+":   "+str(document[i])+"\n"
-    return string
+    # NOTE: this tries to align all the values to the next multiple of 4 of the
+    # longest key length, for a minimum of visual consistency
+    width = max(len(key) for key in document)
+    width = (width // 4 + 2) * 4 - 1
+
+    return "\n".join([
+        "{:{}}{}".format("{}:".format(key), width, value)
+        for key, value in sorted(document.items())
+        ])
 
 
 def delete(document: Document) -> None:
-    """This function deletes a document from disk.
-    :param document: Papis document
-    :type  document: papis.document.Document
+    """Delete a document from the filesystem.
+
+    This function delete the main folder of the document (recursively), but it
+    does not delete the in-memory version of the document.
     """
     folder = document.get_main_folder()
     if folder:
@@ -310,22 +415,24 @@ def delete(document: Document) -> None:
 
 
 def describe(document: Union[Document, Dict[str, Any]]) -> str:
-    """Return a string description of the current document
-    using the document-description-format
+    """
+    :returns: a string description of the current document using
+        :ref:`config-settings-document-description-format`.
     """
     return papis.format.format(
-        papis.config.getstring('document-description-format'),
-        document)
+        papis.config.getstring("document-description-format"),
+        document, default=document["papis_id"])
 
 
 def move(document: Document, path: str) -> None:
-    """This function moves a document to path, it supposes that
-    the document exists in the location ``document.get_main_folder()``.
-    Warning: This method will change the folder in the document object too.
-    :param document: Papis document
-    :type  document: papis.document.Document
-    :param path: Full path where the document will be moved to
-    :type  path: str
+    """Move the *document* to a new main folder at *path*.
+
+    This supposes that the document exists in the location
+    ``document.get_main_folder()`` and will change the folder in the input
+    *document* as a result.
+
+    :param path: absolute path where the document should be moved to. This
+        path is expected to not exist yet and will be created by this function.
 
     >>> doc = from_data({'title': 'Hello World'})
     >>> doc.set_folder('path/to/folder')
@@ -333,112 +440,102 @@ def move(document: Document, path: str) -> None:
     >>> move(doc, newfolder)
     Traceback (most recent call last):
     ...
-    Exception: There is already...
+    FileExistsError: There is already...
     """
+    folder = document.get_main_folder()
+    if not folder:
+        return
+
     path = os.path.expanduser(path)
     if os.path.exists(path):
-        raise Exception(
-            "There is already a document in {0}, please check it,\n"
-            "a temporary papis document has been stored in {1}".format(
-                path, document.get_main_folder()
-            )
+        raise FileExistsError(
+            "There is already a document at '{}' that should be checked. A temporary"
+            "document has been stored at '{}'"
+            .format(path, folder)
         )
-    folder = document.get_main_folder()
-    if folder:
-        import shutil
-        shutil.move(folder, path)
-        # Let us chmod it because it might come from a temp folder
-        # and temp folders are per default 0o600
-        os.chmod(path, papis.config.getint('dir-umask') or 0o600)
-        document.set_folder(path)
+
+    import shutil
+    shutil.move(folder, path)
+
+    # Let us chmod it because it might come from a temp folder
+    # and temp folders are per default 0o600
+    os.chmod(path, papis.config.getint("dir-umask") or 0o600)
+    document.set_folder(path)
 
 
-def from_data(data: Dict[str, Any]) -> Document:
-    """Construct a document object from a data dictionary.
+def sort(docs: Sequence[Document], key: str, reverse: bool = False) -> List[Document]:
+    """Sort a list of documents by the given *key*.
 
-    :param data: Data to be copied to a new document
-    :type  data: dict
-    :returns: A papis document
-    :rtype:  papis.document.Document
+    The sort is performed on the key with a priority given to the type of the
+    value. If the key does not exist in the document, this is given the lowest
+    priority and left at the end of the list.
+
+    :param docs: a sequence of documents.
+    :param key: a key in the documents by which to sort.
+    :param reverse: if *True*, the sorting is done in reverse order (descending
+        instead of ascending).
+
+    :returns: a list of documents sorted by *key*.
     """
-    return Document(data=data)
+    from datetime import datetime
+    default_sort_key = (
+        _SortPriority.Missing, datetime.fromtimestamp(0), 0, "")
 
+    from contextlib import suppress
 
-def sort(docs: List[Document], key: str, reverse: bool) -> List[Document]:
-    # The tuple returned by the _sort_for_key function represents:
-    # (ranking, integer value, string value)
-    # Rankings are:
-    #   date:   0 (come first)
-    #   integers:    2 (come after integers)
-    #   strings:    3 (come after integers)
-    #   None:       4 (come last)
-    sort_rankings = {
-        "date": 0,
-        "int": 1,
-        "string": 2,
-        "None": 3
-    }
+    def document_sort_key(doc: Document) -> Tuple[int, datetime, int, str]:
+        priority, date, int_value, str_value = default_sort_key
 
-    # Preserve the ordering of types even if --reverse is used.
-    if reverse:
-        for sort_type in sort_rankings:
-            sort_rankings[sort_type] = -sort_rankings[sort_type]
+        value = doc.get(key, None)
+        if value is not None:
+            str_value = str(value)
 
-    import datetime
-    zero_date = datetime.datetime.fromtimestamp(0)
-
-    def _sort_for_key(key: str, doc: Document
-                      ) -> Tuple[int, datetime.datetime, int, str]:
-        if key in doc.keys():
-            if key == 'time_added':
-                try:
-                    date_value = \
-                        datetime.datetime.strptime(str(doc[key]),
-                                                   papis.strings.time_format)
-                    return (sort_rankings["date"],
-                            zero_date - date_value, 0, str(doc[key]))
-                except ValueError:
-                    pass
-
-            if str(doc[key]).isdigit():
-                return (sort_rankings["int"],
-                        zero_date,
-                        int(doc[key]),
-                        str(doc[key]))
+            if key == "time_added":
+                with suppress(ValueError):
+                    date = datetime.strptime(str_value, papis.strings.time_format)
+                    priority = _SortPriority.Date
             else:
-                return (sort_rankings["string"],
-                        zero_date,
-                        0,
-                        str(doc[key]))
-        else:
-            # The key does not appear in the document, ensure
-            # it comes last.
-            return (sort_rankings["None"], zero_date, 0, '')
-    logger.debug("Sorting %d documents", len(docs))
-    return sorted(docs, key=lambda d: _sort_for_key(key, d), reverse=reverse)
+                try:
+                    int_value = int(str_value)
+                    priority = _SortPriority.Int
+                except ValueError:
+                    priority = _SortPriority.Other
+
+        return (
+            -priority.value if reverse else priority.value,
+            date, int_value, str_value)
+
+    logger.debug("Sorting %d documents.", len(docs))
+    return sorted(docs, key=document_sort_key, reverse=reverse)
 
 
-def new(folder_path: str, data: Dict[str, Any],
-        files: List[str] = []) -> Document:
+def new(folder_path: str,
+        data: Dict[str, Any],
+        files: Optional[Sequence[str]] = None) -> Document:
+    """Creates a complete document with data and existing files.
+
+    The document is saved to the filesystem at *folder_path* and all the given
+    files are copied over to the main folder.
+
+    :param folder_path: a main folder for the document.
+    :param data: a :class:`dict` with key and values to be used as metadata
+        in the document.
+    :param files: a sequence of files to add to the document.
+    :raises FileExistsError: if *folder_path* already exists.
     """
-    Creates a document at a given folder with data and
-    some existing files.
 
-    :param folder_path: A folder path, if non existing it will be created
-    :type  folder_path: str
-    :param data: Dictionary with key and values to be updated
-    :type  data: dict
-    :param files: Existing paths for files
-    :type  files: list(str)
-    :raises FileExistsError: If folder_path exists
-    """
+    if files is None:
+        files = []
+
     os.makedirs(folder_path)
 
     import shutil
     doc = Document(folder=folder_path, data=data)
-    doc['files'] = []
-    for _file in files:
-        shutil.copy(_file, os.path.join(folder_path))
-        doc['files'].append(os.path.basename(_file))
+    doc["files"] = []
+
+    for f in files:
+        shutil.copy(f, os.path.join(folder_path))
+        doc["files"].append(os.path.basename(f))
+
     doc.save()
     return doc

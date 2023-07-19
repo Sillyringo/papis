@@ -1,32 +1,26 @@
 import os
-import unittest
-import tests
 import tempfile
+
 import papis.database
-from papis.commands.mv import run
+
+from tests.testlib import TemporaryLibrary
 
 
-class Test(unittest.TestCase):
+def test_mv_run(tmp_library: TemporaryLibrary) -> None:
+    from papis.commands.mv import run
 
-    @classmethod
-    def setUpClass(self):
-        tests.setup_test_library()
+    db = papis.database.get()
+    docs = db.get_all_documents()
 
-    def get_docs(self):
-        db = papis.database.get()
-        return db.get_all_documents()
+    doc = docs[0]
+    title = doc["title"]
 
-    def test_simple_update(self):
-        docs = self.get_docs()
-        document = docs[0]
-        title = document['title']
-        new_dir = tempfile.mkdtemp()
-        self.assertTrue(os.path.exists(new_dir))
-        run(document, new_dir)
-        docs = papis.database.get().query_dict(dict(title=title))
-        self.assertTrue(len(docs) == 1)
-        self.assertEqual(os.path.dirname(docs[0].get_main_folder()), new_dir)
-        self.assertEqual(
-            docs[0].get_main_folder(),
-            os.path.join(new_dir, os.path.basename(docs[0].get_main_folder()))
-        )
+    folder = doc.get_main_folder()
+    assert folder is not None
+    folder = os.path.basename(folder)
+
+    with tempfile.TemporaryDirectory(dir=tmp_library.tmpdir) as new_dir:
+        run(doc, new_dir)
+
+        query_doc, = db.query_dict({"title": title})
+        assert query_doc.get_main_folder() == os.path.join(new_dir, folder)

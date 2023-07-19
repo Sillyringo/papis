@@ -1,12 +1,12 @@
 """
-This command is to list contents of a library.
+This command is used to list items in a library.
 
-CLI Examples
-^^^^^^^^^^^^
+Examples
+^^^^^^^^
 
-- List all document files associated will all entries:
+- List all document files associated will all documents in the library:
 
-    .. code:: bash
+    .. code:: sh
 
         papis list --all --file
 
@@ -16,9 +16,9 @@ CLI Examples
         src="https://asciinema.org/a/XwD0ZaUORoOonwDw4rXoQDkjZ.js"
         id="asciicast-XwD0ZaUORoOonwDw4rXoQDkjZ" async></script>
 
-- List all document year and title with custom formatting:
+- List the year and title of all documents with some custom formatting:
 
-    .. code:: bash
+    .. code:: sh
 
         papis list --all --format '{doc[year]} {doc[title]}'
 
@@ -28,10 +28,10 @@ CLI Examples
         src="https://asciinema.org/a/NZ8Ii1wWYPo477CIL4vZhUqOy.js"
         id="asciicast-NZ8Ii1wWYPo477CIL4vZhUqOy" async></script>
 
-- List all documents according to the bibitem formatting (stored in a template
+- List all documents according to the ``bibitem`` formatting (stored in a template
   file ``bibitem.template``):
 
-    .. code:: bash
+    .. code:: sh
 
         papis list --all --template bibitem.template
 
@@ -41,19 +41,30 @@ CLI Examples
         src="https://asciinema.org/a/QZTBZ3tFfyk9WQuJ9WWB2UpSw.js"
         id="asciicast-QZTBZ3tFfyk9WQuJ9WWB2UpSw" async></script>
 
-Cli
-^^^
+- For scripting, printing the id of a series of documents is valuable in order
+  to further use the id in other scripts.
+
+    .. code:: sh
+
+        papis_id=$(papis list --id einstein)
+        papis open papis_id:${papis_id}
+        papis edit papis_id:${papis_id}
+        # etc.
+
+Command-line Interface
+^^^^^^^^^^^^^^^^^^^^^^
+
 .. click:: papis.commands.list:cli
     :prog: papis list
 """
 
 import os
-import logging
 from typing import List, Optional, Union, Sequence
 
 import click
 
 import papis
+import papis.id
 import papis.utils
 import papis.strings
 import papis.config
@@ -63,17 +74,18 @@ import papis.downloaders
 import papis.cli
 import papis.pick
 import papis.format
+import papis.logging
 
-logger = logging.getLogger('list')
+logger = papis.logging.get_logger(__name__)
 
 
-def run(
-        documents: List[papis.document.Document],
+def run(documents: List[papis.document.Document],
         libraries: bool = False,
         downloaders: bool = False,
         pick: bool = False,
         files: bool = False,
         folders: bool = False,
+        papis_id: bool = False,
         info_files: bool = False,
         notes: bool = False,
         fmt: str = "",
@@ -82,14 +94,13 @@ def run(
     """Main method to the list command
 
     :returns: List different objects
-    :rtype:  list
     """
     if downloaders:
         return [str(d) for d in papis.downloaders.get_available_downloaders()]
 
     if template is not None:
         if not os.path.exists(template):
-            logger.error("Template file '%s' not found", template)
+            logger.error("Template file '%s' not found.", template)
             return []
         with open(template) as fd:
             fmt = fd.read()
@@ -97,9 +108,9 @@ def run(
     if libraries:
         config = papis.config.get_configuration()
         return [
-            section + ' ' + config[section]['dir']
+            section + " " + config[section]["dir"]
             for section in config
-            if 'dir' in config[section]]
+            if "dir" in config[section]]
 
     if files:
         return [
@@ -107,19 +118,22 @@ def run(
                 document.get_files() for document in documents
             ] for doc_file in files
         ]
+    elif papis_id:
+        return [papis.id.get(d) for d in documents]
     elif notes:
         return [
-            os.path.join(d.get_main_folder() or '', d["notes"])
+            os.path.join(d.get_main_folder() or "", d["notes"])
             for d in documents
             if d.get_main_folder() is not None
-            and d.has("notes") and isinstance(d["notes"], str)
+            and "notes" in d and isinstance(d["notes"], str)
             and os.path.exists(
-                        os.path.join(d.get_main_folder() or '', d["notes"]))]
+                os.path.join(d.get_main_folder() or "", d["notes"]))]
     elif info_files:
         return [d.get_info_file() for d in documents]
     elif fmt:
         return [
-            papis.format.format(fmt, document)
+            papis.format.format(fmt, document,
+                                default=papis.document.describe(document))
             for document in documents
         ]
     elif folders:
@@ -132,13 +146,19 @@ def run(
 
 
 @click.command("list")
-@click.help_option('--help', '-h')
-@papis.cli.query_option()
+@click.help_option("--help", "-h")
+@papis.cli.query_argument()
 @papis.cli.sort_option()
 @click.option(
     "-i",
     "--info",
     help="Show the info file name associated with the document",
+    default=False,
+    is_flag=True)
+@click.option(
+    "--id",
+    "_papis_id",
+    help="Show the papis_id",
     default=False,
     is_flag=True)
 @click.option(
@@ -160,7 +180,7 @@ def run(
     "--format", "_format",
     help="List entries using a custom papis format, e.g."
     " '{doc[year] {doc[title]}",
-    default='')
+    default="")
 @click.option(
     "--template",
     help="Template file containing a papis format to list entries",
@@ -176,32 +196,34 @@ def run(
     default=False,
     is_flag=True)
 @papis.cli.all_option()
-def cli(
-        query: str, info: bool, _file: bool, notes: bool, _dir: bool,
+@papis.cli.doc_folder_option()
+def cli(query: str,
+        info: bool,
+        _papis_id: bool,
+        _file: bool,
+        notes: bool,
+        _dir: bool,
         _format: str,
+        doc_folder: str,
         template: Optional[str], _all: bool, downloaders: bool,
         libraries: bool,
         sort_field: Optional[str], sort_reverse: bool) -> None:
     """List documents' properties"""
-
-    logger = logging.getLogger('cli:list')
-    documents = []  # type: List[papis.document.Document]
+    documents: List[papis.document.Document] = []
 
     if (not libraries and not downloaders
             and not _file and not info and not _dir):
         _dir = True
 
     if not libraries and not downloaders:
-        db = papis.database.get()
-        documents = db.query(query)
-        if sort_field:
-            documents = \
-                papis.document.sort(documents, sort_field, sort_reverse)
-
+        documents = papis.cli.handle_doc_folder_query_all_sort(query,
+                                                               doc_folder,
+                                                               sort_field,
+                                                               sort_reverse,
+                                                               _all)
         if not documents:
             logger.warning(papis.strings.no_documents_retrieved_message)
-        if not _all:
-            documents = list(papis.pick.pick_doc(documents))
+            return
 
     objects = run(
         documents,
@@ -210,6 +232,7 @@ def cli(
         notes=notes,
         files=_file,
         folders=_dir,
+        papis_id=_papis_id,
         info_files=info,
         fmt=_format,
         template=template)

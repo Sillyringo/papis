@@ -8,10 +8,11 @@ class Downloader(papis.downloaders.fallback.Downloader):
     _BIBTEX_URL = "https://projecteuclid.org/citation/download/citation-{}.bib"
 
     def __init__(self, url: str) -> None:
-        super().__init__(uri=url, name="projecteuclid")
-
-        self.expected_document_extension = "pdf"
-        self.priority = 10
+        super().__init__(
+            uri=url, name="projecteuclid",
+            expected_document_extension="pdf",
+            priority=10,
+            )
 
     @classmethod
     def match(cls, url: str) -> Optional["Downloader"]:
@@ -25,9 +26,9 @@ class Downloader(papis.downloaders.fallback.Downloader):
             # NOTE: this was determined heuristically by looking at the IDs
             # generated for a couple of papers and may change in the future
             identifier = "{}{}_{}".format(
-                    self.ctx.data["journal_abbrev"],
-                    self.ctx.data["volume"],
-                    self.ctx.data["firstpage"])
+                self.ctx.data["journal_abbrev"],
+                self.ctx.data["volume"],
+                self.ctx.data["firstpage"])
 
             return self._BIBTEX_URL.format(identifier)
         except KeyError:
